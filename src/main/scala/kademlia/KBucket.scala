@@ -143,9 +143,9 @@ object KBucket {
         prefix: Prefix,
         newPref: Prefix
     ): Result[(Nodes, Nodes)] = {
-      def emptyNode() = Nodes(List.empty, nodes.size)
+      def emptyNodes() = Nodes(List.empty, nodes.size)
       val result = nodes.value.foldLeft(
-        (emptyNode().asRight[Error], emptyNode().asRight[Error])
+        (emptyNodes().asRight[Error], emptyNodes().asRight[Error])
       ) { (acc, node) =>
         val (fst, snd) = acc
         val f          = NodeId(node.nodeId.value ^ prefix.value)
