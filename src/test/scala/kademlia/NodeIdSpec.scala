@@ -1,17 +1,18 @@
 package kademlia
 
-import kademlia.types._
-import org.scalacheck._
 import cats.syntax.partialOrder._
-class NodeIdSpec extends KSpec {
+import kademlia.types._
+import org.scalacheck.Prop._
+import org.scalacheck._
 
-  "NodeId" should {
+class NodeIdSute extends KSuite {
 
-    "compare" in Prop.forAll(intPairGen) {
+  property("nodeId is comparable") {
+    forAll(intPairGen) {
       case (a, b) =>
         val aId = NodeId.fromInt(a)
         val bId = NodeId.fromInt(b)
-        (aId > bId) ==== (a > b)
+        (aId > bId) == (a > b)
     }
 
   }

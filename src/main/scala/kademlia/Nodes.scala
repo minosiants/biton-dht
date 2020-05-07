@@ -1,5 +1,6 @@
 package kademlia
 
+import cats.Eq
 import kademlia.types.Node
 
 final case class Nodes(value: List[Node], size: Int)
@@ -37,4 +38,8 @@ final case class Nodes(value: List[Node], size: Int)
   def nonFull: Boolean  = !isFull
   def isEmpty: Boolean  = value.isEmpty
   def nonEmpty: Boolean = !isEmpty
+}
+
+object Nodes {
+  implicit val nodesEq: Eq[Nodes] = Eq.fromUniversalEquals
 }

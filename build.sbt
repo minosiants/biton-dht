@@ -1,15 +1,13 @@
-val catsVersion           = "2.1.0"
-val catsEffectVersion     = "2.1.2"
-val fs2Version            = "2.2.1"
-val scodecCoreVersion     = "1.11.6"
-val scodecCatsVersion     = "1.0.0"
-val newtypeVersion        = "0.4.3"
-val specs2Version         = "4.8.3"
-val ip4sVersion           = "1.3.0"
-val log4catsVersion       = "1.0.1"
-val logbackVersion        = "1.2.3"
-val scalacheckVersion     = "1.14.1"
-val catsEffectTestVersion = "0.3.0"
+val catsVersion       = "2.1.0"
+val catsEffectVersion = "2.1.2"
+val fs2Version        = "2.2.1"
+val scodecCoreVersion = "1.11.6"
+val scodecCatsVersion = "1.0.0"
+val newtypeVersion    = "0.4.3"
+val ip4sVersion       = "1.3.0"
+val log4catsVersion   = "1.0.1"
+val scalacheckVersion = "1.14.1"
+val munitVersion      = "0.7.5"
 
 lazy val root = (project in file("."))
   .settings(
@@ -18,21 +16,20 @@ lazy val root = (project in file("."))
     scalaVersion := "2.13.1",
     scalacOptions ++= Seq("-Ymacro-annotations", "-Ywarn-unused", "-Yrangepos"),
     libraryDependencies ++= Seq(
-      "org.typelevel"     %% "cats-core"                  % catsVersion,
-      "org.typelevel"     %% "cats-effect"                % catsEffectVersion,
-      "co.fs2"            %% "fs2-core"                   % fs2Version,
-      "co.fs2"            %% "fs2-io"                     % fs2Version,
-      "org.scodec"        %% "scodec-core"                % scodecCoreVersion,
-      "org.scodec"        %% "scodec-cats"                % scodecCatsVersion,
-      "io.estatico"       %% "newtype"                    % newtypeVersion,
-      "com.comcast"       %% "ip4s-core"                  % ip4sVersion,
-      "io.chrisdavenport" %% "log4cats-slf4j"             % log4catsVersion,
-      "org.scalacheck"    %% "scalacheck"                 % scalacheckVersion % "test",
-      "org.specs2"        %% "specs2-core"                % specs2Version % Test,
-      "org.specs2"        %% "specs2-scalacheck"          % specs2Version % Test,
-      "com.codecommit"    %% "cats-effect-testing-specs2" % catsEffectTestVersion % "test",
-      "ch.qos.logback"    % "logback-classic"             % logbackVersion
+      "org.typelevel"     %% "cats-core"        % catsVersion,
+      "org.typelevel"     %% "cats-effect"      % catsEffectVersion,
+      "co.fs2"            %% "fs2-core"         % fs2Version,
+      "co.fs2"            %% "fs2-io"           % fs2Version,
+      "org.scodec"        %% "scodec-core"      % scodecCoreVersion,
+      "org.scodec"        %% "scodec-cats"      % scodecCatsVersion,
+      "io.estatico"       %% "newtype"          % newtypeVersion,
+      "com.comcast"       %% "ip4s-core"        % ip4sVersion,
+      "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
+      "org.scalacheck"    %% "scalacheck"       % scalacheckVersion % Test,
+      "org.scalameta"     %% "munit-scalacheck" % munitVersion % Test,
+      "org.scalameta"     %% "munit"            % munitVersion % Test
     ),
+    testFrameworks += new TestFramework("munit.Framework"),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1")
   )
