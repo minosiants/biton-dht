@@ -1,6 +1,6 @@
 package kademlia
 
-import java.time.{Clock, Instant, LocalDateTime, ZoneOffset}
+import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 
 import cats.effect.specs2.CatsIO
 import com.comcast.ip4s.IpAddress
@@ -20,7 +20,7 @@ class KSpec extends Specification with ScalaCheck with CatsIO {
 
   val nodeIdCharGen: Gen[NodeId] =
     Gen
-      .infiniteStream(Gen.alphaChar)
+      .infiniteStream(Gen.chooseNum(0, 255))
       .map(_.take(20).toList)
       .map(v => NodeId(BitVector(v.map(_.toByte))))
 
