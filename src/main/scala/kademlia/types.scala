@@ -24,19 +24,20 @@ object types {
       lastSeen: LocalDateTime
   )
 
-  object NodeId {
+  object NodeId extends ByteSyntax {
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
 
     implicit val nodeIdOrder: Order[NodeId] = Order.from[NodeId] { (a, b) =>
       val result = a.value.bytes.toSeq.toList
         .zip(b.value.bytes.toSeq)
         .foldM[Either[Int, *], List[Byte]](List.empty) {
-          case (b, (aa, bb)) if aa == bb => (aa :: b).asRight
-          case (_, (aa, bb)) if aa > bb  => 1.asLeft
-          case (_, (aa, bb)) if aa < bb  => (-1).asLeft
+          case (b, (aa, bb)) if aa.ubyte == bb.ubyte => (aa :: b).asRight
+          case (_, (aa, bb)) if aa.ubyte > bb.ubyte  => 1.asLeft
+          case (_, (aa, bb)) if aa.ubyte < bb.ubyte  => (-1).asLeft
         }
       result.fold(identity, const(0))
     }
+
   }
 
 }

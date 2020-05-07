@@ -14,7 +14,7 @@ sealed abstract class KBucket extends Product with Serializable {
   def cache: Cache
   def lastUpdated: LocalDateTime
 
-  private def nextPrefix: Result[Prefix] =
+  def nextPrefix: Result[Prefix] =
     Either.cond(
       prefix.value != highestNodeId,
       Prefix((prefix.value.not >>> 1).not),
@@ -115,6 +115,7 @@ object KBucket {
         val (fst, snd) = acc
         val f          = NodeId(node.nodeId.value ^ prefix.value)
         val s          = NodeId(node.nodeId.value ^ newPref.value)
+
         if (f < s)
           (fst.flatMap(_.prepend(node)), snd)
         else
