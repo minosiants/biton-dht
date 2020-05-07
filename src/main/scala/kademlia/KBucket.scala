@@ -3,19 +3,17 @@ package kademlia
 import java.time.LocalDateTime
 
 import cats.data.NonEmptyList
-import kademlia.types._
 import cats.implicits._
 import io.estatico.newtype.macros._
 import kademlia.KBucket.{ Cache, splitNodes }
-import scodec.bits.BitVector
+import kademlia.types._
 
-final case class Nodes(value: List[Node], size: Int) {
+final case class Nodes(value: List[Node], size: Int)
+    extends Product
+    with Serializable {
 
-  def replace(node: Node): Option[Nodes] = {
-    Option.when(value.exists(_.nodeId == node.nodeId)) {
-      Nodes(value.filterNot(_.nodeId == node.nodeId) :+ node, size)
-    }
-  }
+  def remove(node: Node): Nodes =
+    Nodes(value.filterNot(_.nodeId == node.nodeId), size)
 
   def append(node: Node): Result[Nodes] = {
     Either.cond(
@@ -45,7 +43,7 @@ final case class Nodes(value: List[Node], size: Int) {
   def isEmpty: Boolean = value.isEmpty
 }
 
-sealed abstract class KBucket {
+sealed abstract class KBucket extends Product with Serializable {
   def prefix: Prefix
   def nodes: Nodes
   def cache: Cache
@@ -53,7 +51,7 @@ sealed abstract class KBucket {
 
   private def nextPrefix: Result[Prefix] =
     Either.cond(
-      prefix.value != KBucket.highestNodeId,
+      prefix.value != highestNodeId,
       Prefix((prefix.value.not >>> 1).not),
       Error.KBucketError(
         s"Not aible to create next prefix. Already the last one - $prefix "
@@ -75,6 +73,11 @@ sealed abstract class KBucket {
       } yield (first, second)
   }
 
+  def addToCache(node: Node): Result[KBucket] = {
+    val newCache = Cache(cache.value.remove(node).dropAndPrepended(node))
+    KBucket.create(prefix, nodes, newCache)
+  }
+
   def add(node: Node): Result[KBucket] = this match {
 
     case KBucket.EmptyBucket(prefix, nodes, cache, _) =>
@@ -85,7 +88,7 @@ sealed abstract class KBucket {
 
     case KBucket.Bucket(prefix, nodes, cache, _) =>
       for {
-        n <- nodes.append(node)
+        n <- nodes.remove(node).append(node)
         b <- KBucket.create(prefix, n, cache)
       } yield b
 
@@ -97,8 +100,6 @@ sealed abstract class KBucket {
 object KBucket {
 
   @newtype final case class Cache(value: Nodes)
-
-  val highestNodeId = BitVector.high(20 * 8)
 
   final case class EmptyBucket(
       prefix: Prefix,

@@ -15,8 +15,6 @@ object types {
   @newtype final case class Key(value: BitVector)
   @newtype final case class NodeId(value: BitVector)
   @newtype final case class Prefix(value: BitVector)
-  @newtype final case class From(value: BitVector)
-  @newtype final case class To(value: BitVector)
   @newtype final case class KSize(value: Int)
 
   case class Node(
