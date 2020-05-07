@@ -55,13 +55,17 @@ class KBucketSpec extends KSpec {
       val result = for {
         (first, second) <- kbucket.split()
       } yield checkBuckets(first, second)
+
+      result.leftMap {
+        case Error.KBucketError(msg) =>
+          println(msg)
+      }
       result ==== true.asRight
     }
 
   }
 
-  def checkBuckets(first: KBucket, second: KBucket) = {
-
+  def checkBuckets(first: KBucket, second: KBucket): Boolean = {
     val firstResult = first.nodes.value.foldLeft(true) { (v, n) =>
       val f = n.nodeId.value ^ first.prefix.value
       val s = n.nodeId.value ^ second.prefix.value
