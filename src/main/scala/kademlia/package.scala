@@ -4,5 +4,7 @@ package object kademlia {
 
   type Result[A] = Either[Error, A]
 
-  val highestNodeId = BitVector.high(20 * 8)
+  val idLength                 = 20 * 8
+  val highestNodeId: BitVector = BitVector.high(idLength)
+  val lowestNodeId: BitVector  = BitVector.low(idLength)
 }

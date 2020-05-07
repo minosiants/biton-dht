@@ -26,9 +26,10 @@ lazy val root = (project in file("."))
       "org.scodec"        %% "scodec-cats"                % scodecCatsVersion,
       "io.estatico"       %% "newtype"                    % newtypeVersion,
       "com.comcast"       %% "ip4s-core"                  % ip4sVersion,
-      "io.chrisdavenport" %% "log4cats-core"              % log4catsVersion, // Only if you want to Support Any Backend
       "io.chrisdavenport" %% "log4cats-slf4j"             % log4catsVersion,
       "org.scalacheck"    %% "scalacheck"                 % scalacheckVersion % "test",
+      "org.specs2"        %% "specs2-core"                % specs2Version % Test,
+      "org.specs2"        %% "specs2-scalacheck"          % specs2Version % Test,
       "com.codecommit"    %% "cats-effect-testing-specs2" % catsEffectTestVersion % "test",
       "ch.qos.logback"    % "logback-classic"             % logbackVersion
     ),
