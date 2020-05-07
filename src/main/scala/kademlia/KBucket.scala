@@ -8,41 +8,6 @@ import io.estatico.newtype.macros._
 import kademlia.KBucket.{ Cache, splitNodes }
 import kademlia.types._
 
-final case class Nodes(value: List[Node], size: Int)
-    extends Product
-    with Serializable {
-
-  def remove(node: Node): Nodes =
-    Nodes(value.filterNot(_.nodeId == node.nodeId), size)
-
-  def append(node: Node): Result[Nodes] = {
-    Either.cond(
-      value.size <= size,
-      Nodes(value :+ node, size),
-      Error.KBucketError(s"$node is full")
-    )
-  }
-
-  def prepend(node: Node): Result[Nodes] = {
-    Either.cond(
-      value.size <= size,
-      Nodes(node :: value, size),
-      Error.KBucketError(s"$node is full")
-    )
-  }
-
-  def dropAndPrepended(node: Node): Nodes = {
-    val list: List[Node] =
-      if (value.size == size)
-        value.dropRight(1).prepended(node)
-      else value.prepended(node)
-    Nodes(list, size)
-  }
-
-  def isFull: Boolean  = value.size == size
-  def isEmpty: Boolean = value.isEmpty
-}
-
 sealed abstract class KBucket extends Product with Serializable {
   def prefix: Prefix
   def nodes: Nodes
@@ -74,7 +39,7 @@ sealed abstract class KBucket extends Product with Serializable {
   }
 
   def addToCache(node: Node): Result[KBucket] = {
-    val newCache = Cache(cache.value.remove(node).dropAndPrepended(node))
+    val newCache = Cache(cache.value.filterNot(node).dropAndPrepended(node))
     KBucket.create(prefix, nodes, newCache)
   }
 
@@ -88,7 +53,7 @@ sealed abstract class KBucket extends Product with Serializable {
 
     case KBucket.Bucket(prefix, nodes, cache, _) =>
       for {
-        n <- nodes.remove(node).append(node)
+        n <- nodes.filterNot(node).append(node)
         b <- KBucket.create(prefix, n, cache)
       } yield b
 
