@@ -3,12 +3,11 @@ package kademlia
 import java.time.LocalDateTime
 
 import scodec.bits.BitVector
-
 import com.comcast.ip4s.IpAddress
-
 import io.estatico.newtype.macros._
-import cats.Order
+import cats.{ Eq, Order }
 import cats.implicits._
+
 import Function._
 object types {
 
@@ -23,7 +22,9 @@ object types {
       port: Int,
       lastSeen: LocalDateTime
   )
-
+  object Node {
+    implicit val nodeEq: Eq[Node] = Eq.fromUniversalEquals
+  }
   object NodeId extends ByteSyntax {
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
 

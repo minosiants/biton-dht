@@ -2,17 +2,14 @@ package kademlia
 
 import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 
-import cats.effect.specs2.CatsIO
 import com.comcast.ip4s.IpAddress
 import kademlia.KBucket.Cache
-import kademlia.types._
+import kademlia.types.{ Node, NodeId, Prefix }
+import munit.ScalaCheckSuite
 import org.scalacheck.Gen
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 import scodec.bits.BitVector
 
-class KSpec extends Specification with ScalaCheck with CatsIO {
-
+class KSuite extends ScalaCheckSuite {
   implicit val clock: Clock = Clock.fixed(Instant.now(), ZoneOffset.UTC)
 
   val nodeIdIntGen: Gen[NodeId] =

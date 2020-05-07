@@ -2,6 +2,7 @@ package kademlia
 
 import java.time.{ Clock, LocalDateTime }
 
+import cats.Eq
 import cats.data.NonEmptyList
 import cats.implicits._
 import io.estatico.newtype.macros._
@@ -65,6 +66,10 @@ sealed abstract class KBucket extends Product with Serializable {
 object KBucket {
 
   @newtype final case class Cache(value: Nodes)
+
+  object Cache {
+    implicit val cacheEq: Eq[Cache] = Eq.fromUniversalEquals
+  }
 
   final case class EmptyBucket(
       prefix: Prefix,
@@ -130,4 +135,6 @@ object KBucket {
       }
     }
   }
+
+  implicit val kbucketEq: Eq[KBucket] = Eq.fromUniversalEquals
 }
