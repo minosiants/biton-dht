@@ -1,6 +1,6 @@
 package kademlia
 
-import java.time.LocalDateTime
+import java.time.{ Clock, LocalDateTime }
 
 import cats.data.NonEmptyList
 import cats.implicits._
@@ -23,7 +23,7 @@ sealed abstract class KBucket extends Product with Serializable {
       )
     )
 
-  def split(): Result[(KBucket, KBucket)] = this match {
+  def split()(implicit clock: Clock): Result[(KBucket, KBucket)] = this match {
     case b @ KBucket.EmptyBucket(_, _, _, _) =>
       Error.KBucketError(s"Can not split empty bucket $b").asLeft
     case b @ KBucket.Bucket(_, _, _, _) =>
@@ -38,12 +38,12 @@ sealed abstract class KBucket extends Product with Serializable {
       } yield (first, second)
   }
 
-  def addToCache(node: Node): Result[KBucket] = {
+  def addToCache(node: Node)(implicit clock: Clock): Result[KBucket] = {
     val newCache = Cache(cache.value.filterNot(node).dropAndPrepended(node))
     KBucket.create(prefix, nodes, newCache)
   }
 
-  def add(node: Node): Result[KBucket] = this match {
+  def add(node: Node)(implicit clock: Clock): Result[KBucket] = this match {
 
     case KBucket.EmptyBucket(prefix, nodes, cache, _) =>
       for {
@@ -92,13 +92,13 @@ object KBucket {
       prefix: Prefix,
       nodes: Nodes,
       cache: Cache
-  ): Result[KBucket] = {
+  )(implicit clock: Clock): Result[KBucket] = {
     if (nodes.isFull)
-      FullBucket(prefix, nodes, cache, LocalDateTime.now()).asRight
+      FullBucket(prefix, nodes, cache, LocalDateTime.now(clock)).asRight
     else if (nodes.isEmpty)
-      EmptyBucket(prefix, nodes, cache, LocalDateTime.now()).asRight
+      EmptyBucket(prefix, nodes, cache, LocalDateTime.now(clock)).asRight
     else
-      Bucket(prefix, nodes, cache, LocalDateTime.now()).asRight
+      Bucket(prefix, nodes, cache, LocalDateTime.now(clock)).asRight
   }
 
   object splitNodes {
