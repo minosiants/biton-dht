@@ -12,9 +12,10 @@ import Function._
 object types {
 
   @newtype final case class Key(value: BitVector)
-  @newtype final case class NodeId(value: BitVector)
+  @newtype final case class Value(value: BitVector)
   @newtype final case class Prefix(value: BitVector)
   @newtype final case class KSize(value: Int)
+  @newtype final case class NodeId(value: BitVector)
 
   case class Node(
       nodeId: NodeId,
