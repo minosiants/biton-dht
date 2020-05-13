@@ -2,6 +2,7 @@ package kademlia
 
 import java.time.LocalDateTime
 
+import benc.BCodec
 import scodec.bits.BitVector
 import com.comcast.ip4s.IpAddress
 import io.estatico.newtype.macros._
@@ -40,6 +41,8 @@ object types {
       result.fold(identity, const(0))
     }
 
+    implicit val nodeIdBCodec: BCodec[NodeId] =
+      BCodec.bitVectorBCodec.xmap(NodeId(_), _.value)
   }
 
 }
