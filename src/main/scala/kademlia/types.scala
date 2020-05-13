@@ -2,7 +2,7 @@ package kademlia
 
 import java.time.LocalDateTime
 
-import benc.BCodec
+import benc.{ BCodec, BencKey }
 import scodec.bits.BitVector
 import com.comcast.ip4s.IpAddress
 import io.estatico.newtype.macros._
