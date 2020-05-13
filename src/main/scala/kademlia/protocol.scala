@@ -107,8 +107,12 @@ object protocol {
 
     object KMessage {
 
-      def getField[A: BDecoder](name: String): BDecoder[A] =
-        BDecoder.down("a").emap(_.get[A](name))
+      def getField[A: BDecoder](down: String)(name: String): BDecoder[A] =
+        BDecoder.down(down).emap(_.get[A](name))
+      def getAField[A: BDecoder](name: String): BDecoder[A] =
+        getField[A]("a")(name)
+      def getRField[A: BDecoder](name: String): BDecoder[A] =
+        getField[A]("r")(name)
 
       final case class Ping(t: String, nodeId: NodeId) extends KMessage
 
@@ -117,7 +121,7 @@ object protocol {
 
         implicit val bdecoder: BDecoder[Ping] = for {
           t      <- BDecoder.at[String]("t")
-          nodeId <- BDecoder.down("a").emap(_.get[NodeId]("id"))
+          nodeId <- getAField[NodeId]("id")
         } yield Ping(t, nodeId)
 
       }
@@ -129,8 +133,8 @@ object protocol {
 
         implicit val bdecoder: BDecoder[FindNode] = for {
           t      <- BDecoder.at[String]("t")
-          id     <- getField[NodeId]("id")
-          target <- getField[NodeId]("target")
+          id     <- getAField[NodeId]("id")
+          target <- getAField[NodeId]("target")
         } yield FindNode(t, id, target)
       }
 
@@ -141,8 +145,8 @@ object protocol {
         implicit val bencoder: BEncoder[GetPeers] = BEncoder[GetPeers]
         implicit val bdecoder: BDecoder[GetPeers] = for {
           t        <- BDecoder.at[String]("t")
-          id       <- getField[NodeId]("id")
-          infoHash <- getField[InfoHash]("info_hash")
+          id       <- getAField[NodeId]("id")
+          infoHash <- getAField[InfoHash]("info_hash")
         } yield GetPeers(t, id, infoHash)
       }
 
@@ -159,11 +163,11 @@ object protocol {
         implicit val bencoder: BEncoder[AnnouncePeer] = BEncoder[AnnouncePeer]
         implicit val bdecoder: BDecoder[AnnouncePeer] = for {
           t           <- BDecoder.at[String]("t")
-          impliedPort <- getField[Boolean]("implied_port")
-          id          <- getField[NodeId]("id")
-          infoHash    <- getField[InfoHash]("info_hash")
-          port        <- getField[Int]("port")
-          token       <- getField[Token]("token")
+          impliedPort <- getAField[Boolean]("implied_port")
+          id          <- getAField[NodeId]("id")
+          infoHash    <- getAField[InfoHash]("info_hash")
+          port        <- getAField[Int]("port")
+          token       <- getAField[Token]("token")
         } yield AnnouncePeer(t, impliedPort, id, infoHash, port, token)
       }
 
@@ -184,12 +188,24 @@ object protocol {
       object NodeIdResponse {
         implicit val bencoder: BEncoder[NodeIdResponse] =
           BEncoder[NodeIdResponse]
+
+        implicit val bdecoder: BDecoder[NodeIdResponse] = for {
+          t  <- BDecoder.at[String]("t")
+          id <- getRField[NodeId]("id")
+        } yield NodeIdResponse(t, id)
       }
 
-      final case class NodeResponse(t: String, nodes: Node) extends KMessage
+      final case class NodeResponse(t: String, id: NodeId, node: Node)
+          extends KMessage
 
       object NodeResponse {
         implicit val bencoder: BEncoder[NodeResponse] = BEncoder[NodeResponse]
+
+        implicit val bdecoder: BDecoder[NodeResponse] = for {
+          t    <- BDecoder.at[String]("t")
+          id   <- getRField[NodeId]("id")
+          node <- getRField[Node]("nodes")
+        } yield NodeResponse(t, id, node)
       }
 
       final case class NodesResponse(
@@ -226,7 +242,9 @@ object protocol {
                 case q =>
                   BencError.CodecError(s"$q Unsupported query type ").asLeft
               }
-            case "r" => ???
+            case "r" =>
+              v.as[NodeIdResponse] orElse v.as[NodeResponse] orElse v
+                .as[NodesResponse] orElse v.as[PeersResponse]
             case "e" => v.as[RpcErrorMessage]
             case m =>
               BencError.CodecError(s"$m Unsupported message type ").asLeft
@@ -273,7 +291,7 @@ object protocol {
           case nir @ NodeIdResponse(_, _) =>
             nir.asBType map response
 
-          case nr @ NodeResponse(_, _) =>
+          case nr @ NodeResponse(_, _, _) =>
             nr.asBType map response
 
           case nr @ NodesResponse(_, _, _, _) =>
