@@ -107,35 +107,64 @@ object protocol {
 
     object KMessage {
 
+      def getField[A: BDecoder](name: String): BDecoder[A] =
+        BDecoder.down("a").emap(_.get[A](name))
+
       final case class Ping(t: String, nodeId: NodeId) extends KMessage
 
       object Ping {
         implicit val bencoder: BEncoder[Ping] = BEncoder[Ping]
-      }
 
-      final case class FindNode(t: String, me: NodeId, target: NodeId)
+        implicit val bdecoder: BDecoder[Ping] = for {
+          t      <- BDecoder.at[String]("t")
+          nodeId <- BDecoder.down("a").emap(_.get[NodeId]("id"))
+        } yield Ping(t, nodeId)
+
+      }
+      final case class FindNode(t: String, id: NodeId, target: NodeId)
           extends KMessage
 
       object FindNode {
         implicit val bencoder: BEncoder[FindNode] = BEncoder[FindNode]
+
+        implicit val bdecoder: BDecoder[FindNode] = for {
+          t      <- BDecoder.at[String]("t")
+          id     <- getField[NodeId]("id")
+          target <- getField[NodeId]("target")
+        } yield FindNode(t, id, target)
       }
+
       final case class GetPeers(t: String, nodeId: NodeId, infoHash: InfoHash)
           extends KMessage
 
       object GetPeers {
         implicit val bencoder: BEncoder[GetPeers] = BEncoder[GetPeers]
+        implicit val bdecoder: BDecoder[GetPeers] = for {
+          t        <- BDecoder.at[String]("t")
+          id       <- getField[NodeId]("id")
+          infoHash <- getField[InfoHash]("info_hash")
+        } yield GetPeers(t, id, infoHash)
       }
 
       final case class AnnouncePeer(
           t: String,
           impliedPort: Boolean,
-          nodeId: NodeId,
+          id: NodeId,
           infoHash: InfoHash,
+          port: Int,
           token: Token
       ) extends KMessage
 
       object AnnouncePeer {
         implicit val bencoder: BEncoder[AnnouncePeer] = BEncoder[AnnouncePeer]
+        implicit val bdecoder: BDecoder[AnnouncePeer] = for {
+          t           <- BDecoder.at[String]("t")
+          impliedPort <- getField[Boolean]("implied_port")
+          id          <- getField[NodeId]("id")
+          infoHash    <- getField[InfoHash]("info_hash")
+          port        <- getField[Int]("port")
+          token       <- getField[Token]("token")
+        } yield AnnouncePeer(t, impliedPort, id, infoHash, port, token)
       }
 
       final case class RpcErrorMessage(t: String, @BencKey("e") error: RpcError)
@@ -188,9 +217,17 @@ object protocol {
       implicit val bdecoder: BDecoder[KMessage] = BDecoder.instance(
         v =>
           v.get[String]("y").flatMap {
-            case "q" => ???
+            case "q" =>
+              v.get[String]("q").flatMap {
+                case "ping"          => v.as[Ping]
+                case "find_node"     => v.as[FindNode]
+                case "get_peers"     => v.as[GetPeers]
+                case "announce_peer" => v.as[AnnouncePeer]
+                case q =>
+                  BencError.CodecError(s"$q Unsupported query type ").asLeft
+              }
             case "r" => ???
-            case "e" => BDecoder.at[RpcErrorMessage]("e").decode(v)
+            case "e" => v.as[RpcErrorMessage]
             case m =>
               BencError.CodecError(s"$m Unsupported message type ").asLeft
           }
@@ -227,7 +264,7 @@ object protocol {
           case gp @ GetPeers(_, _, _) =>
             gp.asBType map query("get_peers")
 
-          case ap @ AnnouncePeer(_, _, _, _, _) =>
+          case ap @ AnnouncePeer(_, _, _, _, _, _) =>
             ap.asBType map query("announce_peer")
 
           case re @ RpcErrorMessage(_, _) =>
