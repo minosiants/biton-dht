@@ -273,7 +273,7 @@ object protocol {
     object GetPeersNodesResponse {
 
       implicit val bencoder: BEncoder[GetPeersNodesResponse] =
-        BEncoder[GetPeersNodesResponse]
+        BCodec[GetPeersNodesResponse]
 
       implicit val bdecoder: BDecoder[GetPeersNodesResponse] = for {
         t     <- BDecoder.at[Transaction]("t")
@@ -288,15 +288,15 @@ object protocol {
 
     final case class GetPeersResponse(
         t: Transaction,
-        nodeId: NodeId,
+        id: NodeId,
         token: Token,
-        peers: List[Peer]
+        values: List[Peer]
     ) extends KMessage
 
     object GetPeersResponse {
 
       implicit val bencoder: BEncoder[GetPeersResponse] =
-        BEncoder[GetPeersResponse]
+        BCodec[GetPeersResponse]
 
       implicit val bdecoder: BDecoder[GetPeersResponse] = for {
         t     <- BDecoder.at[Transaction]("t")

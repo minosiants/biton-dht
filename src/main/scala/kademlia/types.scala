@@ -57,7 +57,7 @@ object types {
       result.fold(identity, const(0))
     }
 
-    val codec: Codec[NodeId] = bits(idLength * 8).xmap(
+    val codec: Codec[NodeId] = bits(idLength).xmap(
       NodeId(_),
       _.value
     )
