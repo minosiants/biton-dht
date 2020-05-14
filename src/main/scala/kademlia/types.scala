@@ -1,8 +1,8 @@
 package kademlia
 
-import java.time.LocalDateTime
+import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 
-import benc.{ BCodec, BEncoder, BencIgnore, BencKey }
+import benc.{ BCodec, BDecoder, BEncoder, BencIgnore, BencKey }
 import scodec.bits.BitVector
 import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
@@ -12,6 +12,7 @@ import scodec.Codec
 import scodec.codecs._
 
 import Function._
+
 object types {
 
   @newtype final case class Key(value: BitVector)
@@ -23,30 +24,24 @@ object types {
   case class Node(
       nodeId: NodeId,
       ip: IpAddress,
-      port: Port,
-      @BencIgnore lastSeen: LocalDateTime
+      port: Port
   )
 
   object Node {
-    def apply(nodeId: NodeId, ip: IpAddress, port: Port) =
-      Node(nodeId, ip, port, LocalDateTime.now)
 
     implicit val nodeEq: Eq[Node] = Eq.fromUniversalEquals
 
-    implicit val nodeCodec: Codec[Node] = (
-      ("nodeId" | NodeId.codec) ::
+    val nodeCodec: Codec[Node] = (
+      ("id" | NodeId.codec) ::
         ("ip" | ipAddressScocec) ::
         ("port" | portScodec)
     ).as[Node]
+    val listNodeCodec = list(nodeCodec)
+    implicit val bencoder: BEncoder[List[Node]] =
+      BEncoder.sc[List[Node]](listNodeCodec)
+    implicit val bdecoder: BDecoder[List[Node]] =
+      BDecoder.sc[List[Node]](listNodeCodec)
 
-    implicit val bencoder: BEncoder[Node] =
-      BEncoder.bitVectorBEncoder.contramap(
-        v =>
-          for {
-
-            nid <- v.nodeId.value
-          } yield ???
-      )
   }
   object NodeId extends ByteSyntax {
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
@@ -66,8 +61,11 @@ object types {
       NodeId(_),
       _.value
     )
-    implicit val nodeIdBCodec: BCodec[NodeId] =
-      BCodec.bitVectorBCodec.xmap(NodeId(_), _.value)
+
+    implicit val nodeIdBencoder: BEncoder[NodeId] =
+      BEncoder.bitVectorBEncoder.contramap(_.value)
+    implicit val nodeIdBDecoder: BDecoder[NodeId] =
+      BDecoder.bitVectorBDecoder.map(NodeId(_))
   }
 
 }
