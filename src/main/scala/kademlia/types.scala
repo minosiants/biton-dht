@@ -1,8 +1,6 @@
 package kademlia
 
-import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
-
-import benc.{ BCodec, BDecoder, BEncoder, BencIgnore, BencKey }
+import benc.{ BDecoder, BEncoder }
 import scodec.bits.BitVector
 import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
