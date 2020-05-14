@@ -7,7 +7,7 @@ import org.scalacheck._
 
 class NodeIdSute extends KSuite {
 
-  property("nodeId is comparable") {
+  property("id is comparable") {
     forAll(intPairGen) {
       case (a, b) =>
         val aId = NodeId.fromInt(a)
