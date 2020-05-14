@@ -1,38 +1,44 @@
 package kademlia
-import benc.{ BCodec, BDecoder, BEncoder, BencError }
+import benc.{ BDecoder, BEncoder }
 import cats.Eq
+import cats.instances.list._
+import cats.syntax.either._
 import kademlia.protocol.KMessage._
+import kademlia.protocol._
+import kademlia.types.Node
 import org.scalacheck.Prop._
 import org.scalacheck._
-import protocol._
-import cats.syntax.either._
-import kademlia.types.NodeId
-import cats.syntax.show._
 
 class ProtocolEncodingSpec extends KSuite {
 
-  // property("Ping")(prop[Ping])
-  //property("FindNode")(prop[FindNode])
-  //property("GetPeers")(prop[GetPeers])
-  //property("AnnouncePeer")(prop[AnnouncePeer])
-  //property("RpcErrorMessage")(prop[RpcErrorMessage])
-  //property("PingResponse")(prop[PingResponse])
+  property("Ping")(prop[Ping])
+  property("FindNode")(prop[FindNode])
+  property("GetPeers")(prop[GetPeers])
+  property("AnnouncePeer")(prop[AnnouncePeer])
+  property("RpcErrorMessage")(prop[RpcErrorMessage])
+  property("PingResponse")(prop[PingResponse])
   property("FindNodeResponse")(prop[FindNodeResponse])
-  /*  property("RpcError")(prop[RpcError])
-    property("GetPeersNodesResponse")(prop[GetPeersNodesResponse])
-    property("GetPeersResponse")(prop[GetPeersResponse])*/
-
+  property("GetPeersNodesResponse")(prop[GetPeersNodesResponse])
+  property("GetPeersResponse")(prop[GetPeersResponse])
+  property("RpcError") {
+    forAll(rpcErrorGen) { e =>
+      val encoded = BEncoder[RpcError].encode(e)
+      val decoded = encoded.flatMap(BDecoder[RpcError].decode)
+      decoded === e.asRight
+    }
+  }
+  property("list of nodes") {
+    forAll(Gen.nonEmptyListOf(nodeGen)) { l =>
+      val encoded = Node.bencoder.encode(l)
+      val decoded = encoded.flatMap(Node.bdecoder.decode)
+      decoded === l.asRight
+    }
+  }
   def prop[A <: KMessage: BEncoder: BDecoder: Gen: Eq]: Prop = {
     val gen = implicitly[Gen[A]]
     forAll(gen) { a =>
       val encoded = BEncoder[KMessage].encode(a)
-      println(encoded)
       val decoded = encoded.flatMap(BDecoder[KMessage].decode)
-      println(decoded)
-      println(a)
-      decoded.leftMap { e: BencError =>
-        println(e.show)
-      }
       decoded === a.asRight
     }
   }
