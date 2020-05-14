@@ -1,8 +1,6 @@
 package kademlia
 
-import java.time.{ Clock, Instant, ZoneOffset }
-
-import benc.{ BCodec, BDecoder, BEncoder, BType, BencError, BencKey }
+import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
 import cats.effect.IO
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.io.udp.SocketGroup

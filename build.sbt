@@ -5,7 +5,7 @@ val scodecCoreVersion = "1.11.6"
 val scodecCatsVersion = "1.0.0"
 val newtypeVersion    = "0.4.3"
 val ip4sVersion       = "1.3.0"
-val bencVersion = "0.7.1-SNAPSHOT"
+val bencVersion       = "0.7.1-SNAPSHOT"
 val log4catsVersion   = "1.0.1"
 val scalacheckVersion = "1.14.1"
 val munitVersion      = "0.7.5"
@@ -25,13 +25,14 @@ lazy val root = (project in file("."))
       "org.scodec"        %% "scodec-cats"      % scodecCatsVersion,
       "io.estatico"       %% "newtype"          % newtypeVersion,
       "com.comcast"       %% "ip4s-core"        % ip4sVersion,
-      "com.minosiants" %% "benc" % bencVersion,
-        "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
+      "com.minosiants"    %% "benc"             % bencVersion,
+      "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
       "org.scalacheck"    %% "scalacheck"       % scalacheckVersion % Test,
       "org.scalameta"     %% "munit-scalacheck" % munitVersion % Test,
       "org.scalameta"     %% "munit"            % munitVersion % Test
     ),
     testFrameworks += new TestFramework("munit.Framework"),
+    addCompilerPlugin(scalafixSemanticdb),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1")
   )
