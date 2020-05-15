@@ -3,6 +3,7 @@ val catsEffectVersion = "2.1.2"
 val fs2Version        = "2.2.1"
 val scodecCoreVersion = "1.11.6"
 val scodecCatsVersion = "1.0.0"
+val scodecStreamVersion ="2.0.0"
 val newtypeVersion    = "0.4.3"
 val ip4sVersion       = "1.3.0"
 val bencVersion       = "0.7.1"
@@ -23,6 +24,7 @@ lazy val root = (project in file("."))
       "co.fs2"            %% "fs2-io"           % fs2Version,
       "org.scodec"        %% "scodec-core"      % scodecCoreVersion,
       "org.scodec"        %% "scodec-cats"      % scodecCatsVersion,
+      "org.scodec" %% "scodec-stream" % scodecStreamVersion,
       "io.estatico"       %% "newtype"          % newtypeVersion,
       "com.comcast"       %% "ip4s-core"        % ip4sVersion,
       "com.minosiants"    %% "benc"             % bencVersion,

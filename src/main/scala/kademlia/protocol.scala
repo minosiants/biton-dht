@@ -1,9 +1,11 @@
 package kademlia
 
+import java.net.InetSocketAddress
+
 import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
-import cats.effect.IO
+import cats.effect.{ Concurrent, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
-import fs2.io.udp.SocketGroup
+import fs2.io.udp.{ Packet, Socket, SocketGroup }
 import io.estatico.newtype.macros.newtype
 import kademlia.types._
 import scodec.bits.BitVector
@@ -11,10 +13,13 @@ import cats.syntax.either._
 import cats.instances.either._
 import benc._
 import cats.Eq
-import scodec.Codec
+import scodec.{ Attempt, Codec, DecodeResult, Err }
 import scodec.codecs._
 import cats.syntax.flatMap._
-
+import fs2._
+import fs2.concurrent.Queue
+import scodec.stream.{ StreamDecoder, StreamEncoder }
+import cats.syntax.show._
 object protocol {
 
   sealed abstract class NodeStatus extends Product with Serializable
@@ -394,6 +399,17 @@ object protocol {
           pr.asBType >>= response(t)
       }
     }
+
+    val codec: Codec[KMessage] = Codec(
+      a =>
+        Attempt.fromEither(Benc.toBenc[KMessage](a).leftMap(e => Err(e.show))),
+      bits =>
+        Attempt.fromEither(
+          Benc
+            .fromBenc[KMessage](bits)
+            .map(DecodeResult(_, BitVector.empty)) leftMap (e => Err(e.show))
+        )
+    )
   }
 
   trait ProtocolCodec {}
@@ -408,6 +424,38 @@ object protocol {
 
       override def findValue(key: Key): IO[KResponse] = ???
     }
+  }
+
+  trait KMessageSocket {
+    def read: Stream[IO, KMessage]
+    def write1(msg: KMessage): IO[Unit]
+  }
+
+  object KMessageSocket {
+
+    def apply(address: InetSocketAddress, socket: Socket[IO], outputBound: Int)(
+        implicit c: Concurrent[IO]
+    ): IO[KMessageSocket] =
+      for {
+        outgoing <- Queue.bounded[IO, KMessage](outputBound)
+      } yield new KMessageSocket {
+        override def read: Stream[IO, KMessage] = {
+          val readSocket = socket
+            .reads()
+            .flatMap(packet => Stream.chunk(packet.bytes))
+            .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
+
+          val writeOutput = outgoing.dequeue
+            .through(StreamEncoder.many(KMessage.codec).toPipeByte)
+            .chunks
+            .map(data => Packet(address, data))
+            .through(socket.writes())
+
+          readSocket.concurrently(writeOutput)
+        }
+
+        override def write1(msg: KMessage): IO[Unit] = outgoing.enqueue1(msg)
+      }
   }
 
 }
