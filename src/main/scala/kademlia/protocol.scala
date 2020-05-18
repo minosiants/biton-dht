@@ -3,7 +3,7 @@ package kademlia
 import java.net.InetSocketAddress
 
 import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
-import cats.effect.{ Concurrent, IO }
+import cats.effect.{ Concurrent, ContextShift, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.io.udp.{ Packet, Socket, SocketGroup }
 import io.estatico.newtype.macros.newtype
@@ -20,38 +20,9 @@ import fs2._
 import fs2.concurrent.Queue
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
+
 object protocol {
 
-  sealed abstract class NodeStatus extends Product with Serializable
-
-  object NodeStatus {
-
-    final case object Online extends NodeStatus
-
-    final case object Offline extends NodeStatus
-
-  }
-
-  sealed abstract class KResponse
-
-  object KResponse {
-
-    final case class NodesResponse(nodes: List[Node]) extends KResponse
-
-    final case class StoredValue(value: Value) extends KResponse
-
-  }
-
-  trait Rpc {
-    def ping(node: Node): IO[NodeStatus]
-
-    def store(key: Key, value: Value): IO[Unit]
-
-    def findNode(nodeId: NodeId): IO[List[Node]]
-
-    def findValue(key: Key): IO[KResponse]
-
-  }
 
   final case class RpcErrorCode(code: Int, msg: String)
       extends Product
@@ -119,16 +90,23 @@ object protocol {
     implicit val bencoder: BEncoder[Peer] = BEncoder.sc[Peer]
   }
 
-  @newtype final case class Transaction(value: String)
+  @newtype final case class Transaction(value: BitVector)
   object Transaction {
+
+    def gen(): Transaction = {
+      Transaction(Random.`2chars`)
+    }
+
+    implicit val eqTransaction: Eq[Transaction] = Eq.fromUniversalEquals
+
     implicit val bencoder: BEncoder[Transaction] =
-      BEncoder.stringBEncoder.contramap(_.value)
+      BEncoder.bitVectorBEncoder.contramap(_.value)
     implicit val bdecoder: BDecoder[Transaction] =
-      BDecoder.utf8StringBDecoder.map(Transaction(_))
+      BDecoder.bitVectorBDecoder.map(Transaction(_))
   }
 
   sealed abstract class KMessage {
-    def t(): Transaction
+    def t: Transaction
   }
 
   object KMessage {
@@ -156,6 +134,7 @@ object protocol {
 
       implicit val eqPing: Eq[Ping] = Eq.fromUniversalEquals
     }
+
     final case class FindNode(t: Transaction, id: NodeId, target: NodeId)
         extends KMessage
 
@@ -234,17 +213,18 @@ object protocol {
         Eq.fromUniversalEquals
     }
 
-    final case class PingResponse(t: Transaction, id: NodeId) extends KMessage
-    object PingResponse {
-      implicit val bencoder: BEncoder[PingResponse] =
-        BCodec[PingResponse]
+    final case class NodeIdResponse(t: Transaction, id: NodeId) extends KMessage
 
-      implicit val bdecoder: BDecoder[PingResponse] = for {
+    object NodeIdResponse {
+      implicit val bencoder: BEncoder[NodeIdResponse] =
+        BCodec[NodeIdResponse]
+
+      implicit val bdecoder: BDecoder[NodeIdResponse] = for {
         t  <- BDecoder.at[Transaction]("t")
         id <- getRField[NodeId]("id")
-      } yield PingResponse(t, id)
+      } yield NodeIdResponse(t, id)
 
-      implicit val eqPingResponse: Eq[PingResponse] = Eq.fromUniversalEquals
+      implicit val eqNodeIdResponse: Eq[NodeIdResponse] = Eq.fromUniversalEquals
     }
 
     final case class FindNodeResponse(
@@ -326,7 +306,7 @@ object protocol {
             }
           case "r" =>
             v.as[GetPeersNodesResponse] orElse v.as[GetPeersResponse] orElse v
-              .as[FindNodeResponse] orElse v.as[PingResponse]
+              .as[FindNodeResponse] orElse v.as[NodeIdResponse]
 
           case "e" => v.as[RpcErrorMessage]
           case m =>
@@ -341,7 +321,7 @@ object protocol {
       ): Either[BencError, BType] = {
         (bt - "t").map { v =>
           BType.map(
-            ("t", BType.string(t.value)),
+            ("t", BType.bits(t.value)),
             ("y", BType.string("q")),
             ("q", BType.string(qr)),
             ("a", v)
@@ -354,7 +334,7 @@ object protocol {
           .toRight(BencError.CodecError("Error field not found"))
           .map { v =>
             BType.map(
-              ("t", BType.string(t.value)),
+              ("t", BType.bits(t.value)),
               ("y", BType.string("e")),
               ("e", v)
             )
@@ -364,7 +344,7 @@ object protocol {
       def response(t: Transaction)(bt: BType): Either[BencError, BType] = {
         (bt - "t").map { v =>
           BType.map(
-            ("t", BType.string(t.value)),
+            ("t", BType.bits(t.value)),
             ("y", BType.string("r")),
             ("r", v)
           )
@@ -386,7 +366,7 @@ object protocol {
         case re @ RpcErrorMessage(t, _) =>
           re.asBType >>= error(t)
 
-        case nir @ PingResponse(t, _) =>
+        case nir @ NodeIdResponse(t, _) =>
           nir.asBType >>= response(t)
 
         case fn @ FindNodeResponse(t, _, _) =>
@@ -412,50 +392,60 @@ object protocol {
     )
   }
 
-  trait ProtocolCodec {}
-
-  object Rpc {
-    def apply(sg: SocketGroup): Rpc = new Rpc {
-      override def ping(node: Node): IO[NodeStatus] = ???
-
-      override def store(key: Key, value: Value): IO[Unit] = ???
-
-      override def findNode(nodeId: NodeId): IO[List[Node]] = ???
-
-      override def findValue(key: Key): IO[KResponse] = ???
-    }
-  }
-
+  type KPacket = (InetSocketAddress, KMessage)
   trait KMessageSocket {
-    def read: Stream[IO, KMessage]
-    def write1(msg: KMessage): IO[Unit]
+    def read: Stream[IO, KPacket]
+    def write1(remote: InetSocketAddress, msg: KMessage): IO[Unit]
   }
 
   object KMessageSocket {
 
-    def apply(address: InetSocketAddress, socket: Socket[IO], outputBound: Int)(
+    def apply(socket: Socket[IO], outputBound: Int = 1024)(
         implicit c: Concurrent[IO]
     ): IO[KMessageSocket] =
       for {
-        outgoing <- Queue.bounded[IO, KMessage](outputBound)
+        outgoing <- Queue.bounded[IO, KPacket](outputBound)
       } yield new KMessageSocket {
-        override def read: Stream[IO, KMessage] = {
+        override def read: Stream[IO, KPacket] = {
           val readSocket = socket
             .reads()
-            .flatMap(packet => Stream.chunk(packet.bytes))
-            .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
+            .flatMap { packet =>
+              Stream
+                .chunk(packet.bytes)
+                .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
+                .map((packet.remote, _))
+            }
 
           val writeOutput = outgoing.dequeue
-            .through(StreamEncoder.many(KMessage.codec).toPipeByte)
-            .chunks
-            .map(data => Packet(address, data))
+            .flatMap {
+              case (remote, msg) =>
+                Stream
+                  .emit(msg)
+                  .through(StreamEncoder.many(KMessage.codec).toPipeByte[IO])
+                  .chunks
+                  .map(data => Packet(remote, data))
+            }
             .through(socket.writes())
 
           readSocket.concurrently(writeOutput)
         }
 
-        override def write1(msg: KMessage): IO[Unit] = outgoing.enqueue1(msg)
+        override def write1(
+            remote: InetSocketAddress,
+            msg: KMessage
+        ): IO[Unit] = outgoing.enqueue1((remote, msg))
       }
+
+    def createSocket(sg: SocketGroup, port: Option[Port] = None)(
+        implicit c: Concurrent[IO],
+        cs: ContextShift[IO]
+    ): Stream[IO, KMessageSocket] = {
+      Stream
+        .resource(
+          sg.open(new InetSocketAddress(port.map(_.value).getOrElse(0)))
+        )
+        .flatMap(socket => Stream.eval(KMessageSocket(socket)))
+    }
   }
 
 }

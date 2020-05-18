@@ -16,7 +16,7 @@ class ProtocolEncodingSpec extends KSuite {
   property("GetPeers")(prop[GetPeers])
   property("AnnouncePeer")(prop[AnnouncePeer])
   property("RpcErrorMessage")(prop[RpcErrorMessage])
-  property("PingResponse")(prop[PingResponse])
+  property("NodeIdResponse")(prop[NodeIdResponse])
   property("FindNodeResponse")(prop[FindNodeResponse])
   property("GetPeersNodesResponse")(prop[GetPeersNodesResponse])
   property("GetPeersResponse")(prop[GetPeersResponse])
@@ -55,7 +55,7 @@ class ProtocolEncodingSpec extends KSuite {
     port <- portGen
   } yield Peer(ip, port)
 
-  val transactionGen: Gen[Transaction] = Gen.alphaStr.map(Transaction(_))
+  def transactionGen: Gen[Transaction] = Gen.const(Transaction.gen())
 
   implicit val rpcErrorGen: Gen[RpcError] = for {
     code <- rpcErrorCodeGen
@@ -93,10 +93,10 @@ class ProtocolEncodingSpec extends KSuite {
     error <- rpcErrorGen
   } yield RpcErrorMessage(t, error)
 
-  implicit val pingResponseGen: Gen[PingResponse] = for {
+  implicit val nodeIdResponseGen: Gen[NodeIdResponse] = for {
     t      <- transactionGen
     nodeId <- nodeIdIntGen
-  } yield PingResponse(t, nodeId)
+  } yield NodeIdResponse(t, nodeId)
 
   implicit val findNodeResponse: Gen[FindNodeResponse] = for {
     t      <- transactionGen
