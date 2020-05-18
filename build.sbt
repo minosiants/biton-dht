@@ -10,6 +10,7 @@ val bencVersion       = "0.7.1"
 val log4catsVersion   = "1.0.1"
 val scalacheckVersion = "1.14.1"
 val munitVersion      = "0.7.5"
+val logbackVersion        = "1.2.3"
 
 lazy val root = (project in file("."))
   .settings(
@@ -29,6 +30,7 @@ lazy val root = (project in file("."))
       "com.comcast"       %% "ip4s-core"        % ip4sVersion,
       "com.minosiants"    %% "benc"             % bencVersion,
       "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
+      "ch.qos.logback"    % "logback-classic"             % logbackVersion,
       "org.scalacheck"    %% "scalacheck"       % scalacheckVersion % Test,
       "org.scalameta"     %% "munit-scalacheck" % munitVersion % Test,
       "org.scalameta"     %% "munit"            % munitVersion % Test

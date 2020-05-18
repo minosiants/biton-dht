@@ -2,6 +2,7 @@ package kademlia
 
 import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 
+import cats.effect.{ ContextShift, IO, Timer }
 import com.comcast.ip4s.{ IpAddress, Port }
 import kademlia.KBucket.Cache
 import kademlia.types.{ Node, NodeId, Prefix }
@@ -9,8 +10,16 @@ import munit.ScalaCheckSuite
 import org.scalacheck.Gen
 import scodec.bits.BitVector
 
+import scala.concurrent.ExecutionContext
+
 class KSuite extends ScalaCheckSuite {
-  implicit val clock: Clock = Clock.fixed(Instant.now(), ZoneOffset.UTC)
+
+  implicit val clock: Clock                      = Clock.fixed(Instant.now(), ZoneOffset.UTC)
+  private val executionContext: ExecutionContext = ExecutionContext.global
+
+  implicit val ioContextShift: ContextShift[IO] =
+    IO.contextShift(executionContext)
+  implicit val ioTimer: Timer[IO] = IO.timer(executionContext)
 
   val nodeIdIntGen: Gen[NodeId] =
     Gen.chooseNum(0, Integer.MAX_VALUE).map(NodeId.fromInt)
