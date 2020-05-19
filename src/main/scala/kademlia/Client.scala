@@ -11,6 +11,7 @@ import kademlia.protocol.{
   KMessage,
   KMessageSocket,
   KPacket,
+  RpcError,
   Token,
   Transaction
 }
@@ -20,6 +21,7 @@ import fs2._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import cats.Show
 import cats.syntax.apply._
+import cats.syntax.show._
 
 trait Client {
 
@@ -71,6 +73,8 @@ object Client {
           )
       }
       val badResponse: RespFunc[A] = {
+        case (_, RpcErrorMessage(_, e @ RpcError(_, _))) =>
+          IO.raiseError(Error.ClientError(e.show))
         case (_, res) =>
           IO.raiseError(Error.ClientError(s"Unexpected response. $res"))
       }
