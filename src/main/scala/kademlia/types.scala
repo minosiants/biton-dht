@@ -43,6 +43,7 @@ object types {
   }
   object NodeId extends ByteSyntax {
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
+    def gen(): NodeId           = NodeId(Random.`20bytes`)
 
     implicit val nodeIdOrder: Order[NodeId] = Order.from[NodeId] { (a, b) =>
       val result = a.value.bytes.toSeq.toList

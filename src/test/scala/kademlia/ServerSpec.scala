@@ -4,6 +4,7 @@ import cats.effect.{ Blocker, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2._
 import fs2.io.udp.SocketGroup
+import kademlia.protocol.Peer
 import kademlia.types.Node
 
 class ServerSpec extends KSuite {
@@ -19,7 +20,8 @@ class ServerSpec extends KSuite {
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           val s = Server.start(sg, serverNode.nodeId, serverNode.port)
-          val c = f(Client(clientNodeId, serverNode, sg))
+          val c =
+            f(Client(clientNodeId, Peer(serverNode.ip, serverNode.port), sg))
           Client.extract(c.concurrently(s))
 
         }
