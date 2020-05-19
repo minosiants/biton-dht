@@ -2,7 +2,7 @@ package kademlia
 
 import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 
-import cats.effect.{ ContextShift, IO, Timer }
+import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import com.comcast.ip4s.{ IpAddress, Port }
 import kademlia.KBucket.Cache
 import kademlia.types.{ Node, NodeId, Prefix }
@@ -19,6 +19,7 @@ class KSuite extends ScalaCheckSuite {
 
   implicit val ioContextShift: ContextShift[IO] =
     IO.contextShift(executionContext)
+
   implicit val ioTimer: Timer[IO] = IO.timer(executionContext)
 
   val nodeIdIntGen: Gen[NodeId] =

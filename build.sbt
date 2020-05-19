@@ -29,6 +29,7 @@ lazy val root = (project in file("."))
       "io.estatico"       %% "newtype"          % newtypeVersion,
       "com.comcast"       %% "ip4s-core"        % ip4sVersion,
       "com.minosiants"    %% "benc"             % bencVersion,
+      "io.chrisdavenport" %% "log4cats-core"              % log4catsVersion,
       "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
       "ch.qos.logback"    % "logback-classic"             % logbackVersion,
       "org.scalacheck"    %% "scalacheck"       % scalacheckVersion % Test,
