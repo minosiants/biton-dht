@@ -48,7 +48,8 @@ object protocol {
 
   object RpcError {
 
-    implicit val eqRpcError: Eq[RpcError] = Eq.fromUniversalEquals
+    implicit val eqRpcError: Eq[RpcError]     = Eq.fromUniversalEquals
+    implicit val showRpcError: Show[RpcError] = Show.fromToString
 
     implicit val bdecoder: BDecoder[RpcError] = for {
       code <- BDecoder.at[RpcErrorCode](0)
