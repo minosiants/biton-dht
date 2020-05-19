@@ -3,7 +3,7 @@ package kademlia
 import java.net.InetSocketAddress
 
 import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
-import cats.effect.{ Concurrent, ContextShift, IO }
+import cats.effect.{ Concurrent, ContextShift, IO, Resource }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.io.udp.{ Packet, Socket, SocketGroup }
 import io.estatico.newtype.macros.newtype
@@ -12,17 +12,17 @@ import scodec.bits.BitVector
 import cats.syntax.either._
 import cats.instances.either._
 import benc._
-import cats.Eq
+import cats.{ Eq, Show }
 import scodec.{ Attempt, Codec, DecodeResult, Err }
 import scodec.codecs._
 import cats.syntax.flatMap._
+import cats.syntax.apply._
 import fs2._
 import fs2.concurrent.Queue
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
-
+import scala.concurrent.duration._
 object protocol {
-
 
   final case class RpcErrorCode(code: Int, msg: String)
       extends Product
@@ -73,6 +73,9 @@ object protocol {
   @newtype final case class Token(value: BitVector)
 
   object Token {
+    //
+    def gen(): Token = Token(Random.shortBinStr)
+
     implicit val codec: BCodec[Token] =
       BCodec.bitVectorBCodec.xmap(Token(_), _.value)
   }
@@ -118,7 +121,8 @@ object protocol {
     def getRField[A: BDecoder](name: String): BDecoder[A] =
       getField[A]("r")(name)
 
-    implicit val eqKmessage: Eq[KMessage] = Eq.fromUniversalEquals
+    implicit val eqKmessage: Eq[KMessage]     = Eq.fromUniversalEquals
+    implicit val showKmessage: Show[KMessage] = Show.fromToString
 
     implicit val fieldName: FieldName = FieldName.snakeCaseFieldName
 
@@ -406,6 +410,7 @@ object protocol {
       for {
         outgoing <- Queue.bounded[IO, KPacket](outputBound)
       } yield new KMessageSocket {
+
         override def read: Stream[IO, KPacket] = {
           val readSocket = socket
             .reads()
@@ -440,11 +445,17 @@ object protocol {
         implicit c: Concurrent[IO],
         cs: ContextShift[IO]
     ): Stream[IO, KMessageSocket] = {
+
+      val logSocket = Resource.make(IO(println("new socket")))(
+        _ => IO(println("closed socket"))
+      )
+
       Stream
-        .resource(
+        .resource {
           sg.open(new InetSocketAddress(port.map(_.value).getOrElse(0)))
-        )
+        }
         .flatMap(socket => Stream.eval(KMessageSocket(socket)))
+
     }
   }
 

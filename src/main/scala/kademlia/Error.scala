@@ -11,5 +11,6 @@ object Error {
   final case class KBucketError(msg: String)               extends Error
   final case class MultiError(errors: NonEmptyList[Error]) extends Error
   final case class ClientError(msg: String)                extends Error
+  final case class ServerError(msg: String)                extends Error
   implicit val kerrorEq: Eq[Error] = Eq.fromUniversalEquals
 }

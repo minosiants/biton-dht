@@ -16,14 +16,16 @@ object Random {
     def apply[A](run: SRandom => A): R[A] =
       Reader(run)
 
-    def short: R[Short] = R(_.between(Short.MinValue, Short.MaxValue).toShort)
-
-    def shortBits: R[BitVector] =
-      short.map(i => BitVector.fromShort(i))
+    def rshort: R[Short] = R(_.between(Short.MinValue, Short.MaxValue).toShort)
+    def rlong: R[Long]   = R(_.nextLong())
+    def rshortBits: R[BitVector] =
+      rshort.map(BitVector.fromShort(_))
+    def rlongBits: R[BitVector] = rlong.map(BitVector.fromLong(_))
   }
 
   def random = new SRandom(Instant.now().toEpochMilli)
 
-  def `2chars`: BitVector = R.shortBits.run(random)
+  def `2chars`: BitVector    = R.rshortBits.run(random)
+  def shortBinStr: BitVector = R.rlongBits.run(random)
 
 }
