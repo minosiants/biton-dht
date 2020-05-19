@@ -1,6 +1,6 @@
 import scodec.bits.BitVector
 
-package object kademlia extends Codecs {
+package object kademlia extends Codecs with HostnameSyntax {
 
   type Result[A] = Either[Error, A]
 

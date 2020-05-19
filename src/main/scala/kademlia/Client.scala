@@ -11,6 +11,7 @@ import kademlia.protocol.{
   KMessage,
   KMessageSocket,
   KPacket,
+  Peer,
   RpcError,
   Token,
   Transaction
@@ -51,14 +52,14 @@ trait Client {
 
 object Client {
 
-  def apply(id: NodeId, target: Node, sg: SocketGroup)(
+  def apply(id: NodeId, contact: Peer, sg: SocketGroup)(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO]
   ) = {
     val logger = Slf4jLogger.getLogger[IO]
 
     val remote =
-      new InetSocketAddress(target.ip.toInetAddress, target.port.value)
+      new InetSocketAddress(contact.ip.toInetAddress, contact.port.value)
     def socket = KMessageSocket.createSocket(sg)
 
     type RespFunc[A <: KMessage] = PartialFunction[KPacket, IO[A]]
