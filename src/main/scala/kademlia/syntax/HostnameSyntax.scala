@@ -1,9 +1,9 @@
-package kademlia
+package kademlia.syntax
 
-import java.net.{ InetAddress, UnknownHostException }
+import java.net.{InetAddress, UnknownHostException}
 
 import cats.effect.IO
-import com.comcast.ip4s.{ Hostname, IpAddress }
+import com.comcast.ip4s.{Hostname, IpAddress}
 
 //Remove when next version of ip4s is released
 

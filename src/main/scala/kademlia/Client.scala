@@ -52,7 +52,7 @@ trait Client {
 
 object Client {
 
-  def apply(id: NodeId, contact: Peer, sg: SocketGroup)(
+  def apply(id: NodeId, contact: Contact, sg: SocketGroup)(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO]
   ) = {
