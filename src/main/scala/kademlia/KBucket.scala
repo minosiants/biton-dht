@@ -118,8 +118,8 @@ object KBucket {
         (emptyNodes().asRight[Error], emptyNodes().asRight[Error])
       ) { (acc, node) =>
         val (fst, snd) = acc
-        val f          = NodeId(node.nodeId.value ^ prefix.value)
-        val s          = NodeId(node.nodeId.value ^ newPref.value)
+        val f          = node.nodeId ^ prefix.toNodeId
+        val s          = node.nodeId ^ newPref.toNodeId
 
         if (f < s)
           (fst.flatMap(_.prepend(node)), snd)

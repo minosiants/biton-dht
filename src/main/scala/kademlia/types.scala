@@ -1,11 +1,12 @@
 package kademlia
 
-import benc.{ BDecoder, BEncoder }
+import benc.{BDecoder, BEncoder}
 import scodec.bits.BitVector
-import com.comcast.ip4s.{ IpAddress, Port }
+import com.comcast.ip4s.{IpAddress, Port}
 import io.estatico.newtype.macros._
-import cats.{ Eq, Order }
+import cats.{Eq, Order}
 import cats.implicits._
+import kademlia.syntax.ByteSyntax
 import scodec.Codec
 import scodec.codecs._
 
@@ -19,21 +20,26 @@ object types {
   @newtype final case class KSize(value: Int)
   @newtype final case class NodeId(value: BitVector)
 
+  final case class Contact(ip: IpAddress, port: Port) extends Product with Serializable
+
+  object Contact {
+    val codec:Codec[Contact] = (
+        ("ip" | ipAddressScocec) ::
+        ("port" | portScodec)
+      ).as[Contact]
+  }
   case class Node(
       nodeId: NodeId,
-      ip: IpAddress,
-      port: Port
-  )
+      contact: Contact
+  )extends Product with Serializable
 
   object Node {
 
     implicit val nodeEq: Eq[Node] = Eq.fromUniversalEquals
 
-    val nodeCodec: Codec[Node] = (
-      ("id" | NodeId.codec) ::
-        ("ip" | ipAddressScocec) ::
-        ("port" | portScodec)
-    ).as[Node]
+    val nodeCodec: Codec[Node] =
+      (NodeId.codec :: Contact.codec).as[Node]
+
     val listNodeCodec = list(nodeCodec)
     implicit val bencoder: BEncoder[List[Node]] =
       BEncoder.sc[List[Node]](listNodeCodec)

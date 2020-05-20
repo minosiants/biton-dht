@@ -1,4 +1,4 @@
-package kademlia
+package kademlia.syntax
 
 trait ByteSyntax {
   implicit def byteSyntax(b: Byte): ByteOps = new ByteOps(b)
