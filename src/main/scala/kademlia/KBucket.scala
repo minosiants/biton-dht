@@ -118,13 +118,11 @@ object KBucket {
         (emptyNodes().asRight[Error], emptyNodes().asRight[Error])
       ) { (acc, node) =>
         val (fst, snd) = acc
-        val f          = node.nodeId ^ prefix.toNodeId
-        val s          = node.nodeId ^ newPref.toNodeId
-
-        if (f < s)
-          (fst.flatMap(_.prepend(node)), snd)
-        else
+        node.nodeId.closest(prefix.toNodeId, newPref.toNodeId)(
+          (fst.flatMap(_.prepend(node)), snd),
           (fst, snd.flatMap(_.prepend(node)))
+        )
+
       }
       result match {
         case (Left(e1), Left(e2)) =>
