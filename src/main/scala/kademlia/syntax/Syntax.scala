@@ -1,3 +1,7 @@
 package kademlia.syntax
 
-trait Syntax extends HostnameSyntax with NodeIdSyntax with PrefixSyntax
+trait Syntax
+    extends HostnameSyntax
+    with NodeIdSyntax
+    with PrefixSyntax
+    with ByteSyntax
