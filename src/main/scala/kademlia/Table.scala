@@ -82,7 +82,7 @@ private final case class KTable(
             )
         }
       case (_, bucket) =>
-        (bucket.add(node) orElse (bucket.addToCache(node)))
+        (bucket.add(node) orElse bucket.addToCache(node))
           .map(NonEmptyVector.one)
     }
 

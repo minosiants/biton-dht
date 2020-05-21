@@ -1,16 +1,13 @@
 package kademlia
 
 import benc.{ BDecoder, BEncoder }
-import scodec.bits.BitVector
+import scodec.bits.{ BitVector, ByteVector }
 import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
 import cats.{ Eq, Order }
 import cats.implicits._
-import kademlia.syntax.ByteSyntax
 import scodec.Codec
 import scodec.codecs._
-
-import Function._
 
 object types {
 
@@ -28,6 +25,9 @@ object types {
 
   object Prefix {
     implicit val eqPrefix: Eq[Prefix] = Eq.instance(_.value === _.value)
+
+    implicit val orderPrefix: Order[Prefix] =
+      orderByteVector.contramap[Prefix](_.value.bytes)
   }
 
   final case class Contact(ip: IpAddress, port: Port)
@@ -63,21 +63,13 @@ object types {
 
   @newtype final case class NodeId(value: BitVector)
 
-  object NodeId extends ByteSyntax {
+  object NodeId {
 
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
     def gen(): NodeId           = NodeId(Random.`20bytes`)
 
-    implicit val nodeIdOrder: Order[NodeId] = Order.from[NodeId] { (a, b) =>
-      val result = a.value.bytes.toSeq.toList
-        .zip(b.value.bytes.toSeq)
-        .foldM[Either[Int, *], List[Byte]](List.empty) {
-          case (b, (aa, bb)) if aa.ubyte == bb.ubyte => (aa :: b).asRight
-          case (_, (aa, bb)) if aa.ubyte > bb.ubyte  => 1.asLeft
-          case (_, (aa, bb)) if aa.ubyte < bb.ubyte  => (-1).asLeft
-        }
-      result.fold(identity, const(0))
-    }
+    implicit val nodeIdOrder: Order[NodeId] =
+      orderByteVector.contramap(_.value.bytes)
 
     val codec: Codec[NodeId] = bits(idLength).xmap(
       NodeId(_),
