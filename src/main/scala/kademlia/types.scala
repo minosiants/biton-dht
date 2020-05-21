@@ -14,7 +14,9 @@ import Function._
 
 object types {
 
-  @newtype final case class KSize(value: Int)
+  @newtype final case class KSize(value: Int) {
+    def *(i: Int): KSize = KSize(value * i)
+  }
   @newtype final case class Key(value: BitVector)
   @newtype final case class Value(value: BitVector)
   @newtype final case class Index(value: Int) {

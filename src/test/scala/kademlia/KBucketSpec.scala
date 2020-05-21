@@ -2,15 +2,15 @@ package kademlia
 import cats.syntax.either._
 import cats.syntax.partialOrder._
 import kademlia.KBucket.Cache
-import kademlia.types.NodeId
+import kademlia.types.{ KSize, NodeId }
 import org.scalacheck.Prop.forAll
 
 class KBucketSpec extends KSuite {
 
-  val ksize = 5
+  val ksize = KSize(5)
 
   test("add to full kbucket") {
-    forAll(kbucketGen(0, ksize, ksize), nodeGen) { (kbucket, node) =>
+    forAll(kbucketGen(0, ksize, ksize.value), nodeGen) { (kbucket, node) =>
       val result = kbucket.add(node)
       result === Error.KBucketError(s"$kbucket is full").asLeft
     }
@@ -39,7 +39,7 @@ class KBucketSpec extends KSuite {
   }
 
   test("add to kbucket cache") {
-    forAll(kbucketGen(0, ksize, ksize), nodeGen) { (kbucket, node) =>
+    forAll(kbucketGen(0, ksize, ksize.value), nodeGen) { (kbucket, node) =>
       val result = for {
         k  <- kbucket.addToCache(node)
         kk <- k.addToCache(node)
@@ -52,7 +52,7 @@ class KBucketSpec extends KSuite {
     }
 
     test("split kbucket") {
-      forAll(kbucketGen(0, ksize, ksize)) { kbucket =>
+      forAll(kbucketGen(0, ksize, ksize.value)) { kbucket =>
         val result = for {
           (first, second) <- kbucket.split()
         } yield checkBuckets(first, second)

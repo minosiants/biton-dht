@@ -15,6 +15,8 @@ import scala.annotation.tailrec
 
 trait Table {
   def nodeId: NodeId
+  def size: Long = kbuckets.size
+  def kbuckets: NonEmptyVector[KBucket]
   def addNode(node: Node): Result[Table]
   def addNodes(nodes: List[Node]): Result[Table]
 }
@@ -27,8 +29,8 @@ object Table {
       ksize: KSize = KSize(8)
   )(implicit c: Concurrent[IO], clock: Clock): IO[Table] = {
     val prefix = Prefix(lowestNodeId)
-    val nodes  = Nodes(List.empty, ksize.value)
-    val cache  = Cache(Nodes(List.empty, ksize.value * 3))
+    val nodes  = Nodes(List.empty, ksize)
+    val cache  = Cache(Nodes(List.empty, ksize * 3))
     for {
       b <- IO.fromEither(KBucket.create(prefix, nodes, cache))
     } yield KTable(nodeId, NonEmptyVector.of(b))
@@ -112,7 +114,7 @@ private final case class KTable(
         case (e @ Left(_), _) => e
         case (_, Nil)         => t
         case (_, x :: xs) =>
-          go(addNode(x), xs)
+          go(t.flatMap(_.addNode(x)), xs)
       }
     }
     go(this.asRight, nodes)
