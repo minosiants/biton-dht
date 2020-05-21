@@ -4,17 +4,16 @@ import java.net.InetSocketAddress
 import java.time.Clock
 
 import cats.Applicative
-import cats.data.NonEmptyList
+import cats.data.{ NonEmptyList, NonEmptyVector }
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{ Concurrent, ContextShift, IO }
 import kademlia.protocol.Peer
 import com.comcast.ip4s._
 import cats.instances.option
 import fs2.io.udp.SocketGroup
-import kademlia.KBucket.Cache
-import kademlia.types.{Contact, Node, NodeId, Prefix}
+import kademlia.KBucket.{ Cache, FullBucket }
+import kademlia.types.{ Contact, Index, KSize, Node, NodeId, Prefix }
 import io.estatico.newtype.macros.newtype
-
 import fs2._
 import cats.syntax.order._
 
@@ -29,35 +28,10 @@ trait DHT {
 
 object DHT {
 
-
-  final case class Table(nodeId:NodeId, buckets:Ref[IO, NonEmptyList[KBucket]]) {
-    def addNode(node:Node) = {
-      buckets.tryUpdate{ b =>
-        //b.find()
-      }
-    }
-    def addNodes(nodes:List[Node]):Boolean = {
-      nodes.map{ v =>
-        buckets.
-      }
-    }
-
-  }
-  object Table {
-
-
-    def empty(nodeId:NodeId, ksize:Int = 8)(implicit clock: Clock): IO[Table] = {
-      val prefix = Prefix(lowestNodeId)
-      val nodes = Nodes(List.empty, ksize)
-      val cache = Cache(Nodes(List.empty, ksize*3))
-      for {
-        b <- IO.fromEither(KBucket.create(prefix, nodes, cache))
-        ref <- Ref.of[IO, NonEmptyList[KBucket]](NonEmptyList.of(b))
-      }yield Table(nodeId, ref)
-
-    }
-  }
-  def createContact(hostname: Hostname, port: Port = Port(6881).get): IO[Contact] = {
+  def createContact(
+      hostname: Hostname,
+      port: Port = Port(6881).get
+  ): IO[Contact] = {
     hostname.resolve
       .map(_.map(ip => Contact(ip, port)))
       .flatMap(
@@ -77,34 +51,45 @@ object DHT {
 
   def bootstrap(
       sg: SocketGroup
-  )(implicit c: Concurrent[IO], cs: ContextShift[IO], clock: Clock) = {
-    for {
-      table <- Table.empty(nodeId)
-      contact <- transmissionbt
-      nodes  <- Client(nodeId, contact, sg).findNodeF(nodeId).map(_.nodes)
-    } yield nodes
+  )(
+      implicit c: Concurrent[IO],
+      cs: ContextShift[IO],
+      clock: Clock
+  ): IO[Table] = {
 
-
-    def sortNodes(nodeId:NodeId, nodes: List[Node]):List[Node] = {
-      nodes.sortWith{(a, b) =>
+    def sortNodes(nodeId: NodeId, nodes: List[Node]): List[Node] = {
+      nodes.sortWith { (a, b) =>
         val f = nodeId ^ a.nodeId
         val s = nodeId ^ b.nodeId
         f > s
       }
     }
-    def go(table:Table, nodes: List[Node]):IO[Table] = {
-      val result = Stream.emits(nodes).take(3).map{n =>
-        Client(nodeId, n.contact, sg).findNode(table.nodeId).map(_.nodes)
-      }.parJoin(3).compile.toList.map(_.flatten)
+    def go(table: Table, nodes: List[Node]): IO[Table] = {
+      val result = Stream
+        .emits(nodes)
+        .take(3)
+        .map { n =>
+          Client(nodeId, n.contact, sg).findNode(table.nodeId).map(_.nodes)
+        }
+        .parJoin(3)
+        .compile
+        .toList
+        .map(_.flatten)
 
       for {
         n <- result
-        sorted =  sortNodes(table.nodeId, n)
-        updated = table.addNodes(n)
-        rr <- if(updated) go(table,sorted) else IO(table)
-      }yield rr
+        sorted = sortNodes(table.nodeId, n)
+        updated <- IO.fromEither(table.addNodes(n))
+        rr      <- go(updated, sorted)
+      } yield rr
 
     }
+    for {
+      table   <- Table.empty(nodeId)
+      contact <- transmissionbt
+      nodes   <- Client(nodeId, contact, sg).findNodeF(nodeId).map(_.nodes)
+      result  <- go(table, nodes)
+    } yield result
 
   }
 }

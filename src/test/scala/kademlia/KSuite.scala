@@ -5,7 +5,7 @@ import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import com.comcast.ip4s.{ IpAddress, Port }
 import kademlia.KBucket.Cache
-import kademlia.types.{ Node, NodeId, Prefix }
+import kademlia.types.{ Contact, Node, NodeId, Prefix }
 import munit.ScalaCheckSuite
 import org.scalacheck.Gen
 import scodec.bits.BitVector
@@ -42,12 +42,15 @@ class KSuite extends ScalaCheckSuite {
       .map(IpAddress.fromBytes(_).get)
 
   val portGen: Gen[Port] = Gen.chooseNum(0, 65535).map(Port(_).get)
+  val contactGen: Gen[Contact] = for {
+    ip   <- ipV4Gen
+    port <- portGen
+  } yield Contact(ip, port)
 
   val nodeGen: Gen[Node] = for {
-    ip   <- ipV4Gen
-    id   <- nodeIdCharGen
-    port <- portGen
-  } yield Node(id, ip, port)
+    id      <- nodeIdCharGen
+    contact <- contactGen
+  } yield Node(id, contact)
 
   def listOfNodesGen(size: Int): Gen[List[Node]] =
     Gen

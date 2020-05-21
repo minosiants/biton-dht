@@ -6,16 +6,16 @@ import kademlia.protocol.Peer
 import scodec.bits.BitVector
 
 class DHTSpec extends KSuite {
-  test("bal") {
+  test("bal".ignore) {
+
     val res = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           DHT.bootstrap(sg)
-
         }
       }
 
-    println(res.map(_.nodes.size).attempt.unsafeRunSync())
+    println(res.attempt.unsafeRunSync())
     true
   }
 }
