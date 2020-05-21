@@ -5,7 +5,7 @@ import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import com.comcast.ip4s.{ IpAddress, Port }
 import kademlia.KBucket.Cache
-import kademlia.types.{ Contact, Node, NodeId, Prefix }
+import kademlia.types.{ Contact, KSize, Node, NodeId, Prefix }
 import munit.ScalaCheckSuite
 import org.scalacheck.Gen
 import scodec.bits.BitVector
@@ -58,7 +58,7 @@ class KSuite extends ScalaCheckSuite {
       .map(_.take(size * 30).toSet.take(size).toList)
       .retryUntil(_.size == size)
 
-  def kbucketGen(prefix: Int, ksize: Int, nsize: Int): Gen[KBucket] =
+  def kbucketGen(prefix: Int, ksize: KSize, nsize: Int): Gen[KBucket] =
     for {
       nodes <- listOfNodesGen(nsize).map(v => Nodes(v, ksize))
       cache <- listOfNodesGen(nsize).map(v => Cache(Nodes(v, ksize)))

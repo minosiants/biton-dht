@@ -113,7 +113,7 @@ object KBucket {
         prefix: Prefix,
         newPref: Prefix
     ): Result[(Nodes, Nodes)] = {
-      def emptyNodes() = Nodes(List.empty, nodes.size)
+      def emptyNodes() = Nodes(List.empty, nodes.ksize)
       val result = nodes.value.foldLeft(
         (emptyNodes().asRight[Error], emptyNodes().asRight[Error])
       ) { (acc, node) =>
