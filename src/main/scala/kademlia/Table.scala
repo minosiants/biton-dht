@@ -10,12 +10,14 @@ import cats.syntax.either._
 import cats.syntax.foldable._
 import kademlia.KBucket.{ Cache, FullBucket }
 import kademlia.types._
-
+import cats.instances.int._
+import cats.syntax.eq._
 import scala.annotation.tailrec
 
-trait Table {
+trait Table extends Product with Serializable {
   def nodeId: NodeId
-  def size: Long = kbuckets.size
+  def bsize: Long = kbuckets.size
+  def size: Long  = kbuckets.map(_.nodes.value.size).fold
   def kbuckets: NonEmptyVector[KBucket]
   def addNode(node: Node): Result[Table]
   def addNodes(nodes: List[Node]): Result[Table]
@@ -38,7 +40,7 @@ object Table {
   }
 }
 
-private final case class KTable(
+final case class KTable(
     nodeId: NodeId,
     kbuckets: NonEmptyVector[KBucket]
 )(implicit val c: Clock)
@@ -66,11 +68,10 @@ private final case class KTable(
   }
   def updateBucket(
       node: Node,
-      isFirst: Boolean,
       bucket: KBucket
   ): Result[NonEmptyVector[KBucket]] = {
-    (isFirst, bucket) match {
-      case (true, b @ FullBucket(_, _, _, _)) =>
+    (bucket.prefix === kbuckets.head.prefix, bucket) match {
+      case (true, b @ FullBucket(_, nodes, _, _)) =>
         //Is one split enough ?
         b.split().flatMap {
           case (first, second) =>
@@ -102,9 +103,9 @@ private final case class KTable(
   override def addNode(node: Node): Result[Table] = {
     val (i, kb) = findBucketFor(node)
     for {
-      list <- updateBucket(node, i == 0, kb)
-      res = updateKBuckets(i, list)
-    } yield KTable(nodeId, res.reverse)
+      list <- updateBucket(node, kb)
+      res = updateKBuckets(i, list.reverse)
+    } yield KTable(nodeId, res)
   }
 
   override def addNodes(nodes: List[Node]): Result[Table] = {

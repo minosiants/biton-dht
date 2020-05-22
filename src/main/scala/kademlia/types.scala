@@ -6,6 +6,7 @@ import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
 import cats.{ Eq, Order }
 import cats.implicits._
+
 import scodec.Codec
 import scodec.codecs._
 
@@ -24,6 +25,7 @@ object types {
   @newtype final case class Prefix(value: BitVector)
 
   object Prefix {
+
     implicit val eqPrefix: Eq[Prefix] = Eq.instance(_.value === _.value)
 
     implicit val orderPrefix: Order[Prefix] =
@@ -35,12 +37,17 @@ object types {
       with Serializable
 
   object Contact {
+    implicit val eqContact: Eq[Contact] = Eq.instance { (a, b) =>
+      a.ip.equals(b.ip) && a.port.equals(b.port)
+    }
+
     val codec: Codec[Contact] = (
       ("ip" | ipAddressScocec) ::
         ("port" | portScodec)
     ).as[Contact]
+
   }
-  case class Node(
+  final case class Node(
       nodeId: NodeId,
       contact: Contact
   ) extends Product
@@ -48,7 +55,9 @@ object types {
 
   object Node {
 
-    implicit val nodeEq: Eq[Node] = Eq.fromUniversalEquals
+    implicit val eqNode: Eq[Node] = Eq.instance { (a, b) =>
+      a.nodeId === b.nodeId && a.contact === b.contact
+    }
 
     val nodeCodec: Codec[Node] =
       (NodeId.codec :: Contact.codec).as[Node]
@@ -66,7 +75,9 @@ object types {
   object NodeId {
 
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
-    def gen(): NodeId           = NodeId(Random.`20bytes`)
+    def fromString(str: String): NodeId =
+      NodeId(BitVector(str.getBytes().take(20)).padLeft(idLength))
+    def gen(): NodeId = NodeId(Random.`20bytes`)
 
     implicit val nodeIdOrder: Order[NodeId] =
       orderByteVector.contramap(_.value.bytes)

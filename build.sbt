@@ -7,6 +7,7 @@ val scodecStreamVersion ="2.0.0"
 val newtypeVersion    = "0.4.3"
 val ip4sVersion       = "1.3.0"
 val bencVersion       = "0.7.1"
+val boopickleVersion = "1.3.2"
 val log4catsVersion   = "1.0.1"
 val scalacheckVersion = "1.14.1"
 val munitVersion      = "0.7.5"
@@ -32,6 +33,7 @@ lazy val root = (project in file("."))
       "io.chrisdavenport" %% "log4cats-core"              % log4catsVersion,
       "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
       "ch.qos.logback"    % "logback-classic"             % logbackVersion,
+      "io.suzaku" %% "boopickle" % boopickleVersion,
       "org.scalacheck"    %% "scalacheck"       % scalacheckVersion % Test,
       "org.scalameta"     %% "munit-scalacheck" % munitVersion % Test,
       "org.scalameta"     %% "munit"            % munitVersion % Test

@@ -1,6 +1,7 @@
 package kademlia
 
 import java.net.InetSocketAddress
+import java.nio.channels.InterruptedByTimeoutException
 
 import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
 import cats.effect.{ Concurrent, ContextShift, IO, Resource }
@@ -17,10 +18,12 @@ import scodec.{ Attempt, Codec, DecodeResult, Err }
 import scodec.codecs._
 import cats.syntax.flatMap._
 import cats.syntax.apply._
-import fs2._
+import fs2.Stream
 import fs2.concurrent.Queue
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
 import scala.concurrent.duration._
 object protocol {
 
@@ -404,8 +407,12 @@ object protocol {
   }
 
   object KMessageSocket {
-
-    def apply(socket: Socket[IO], outputBound: Int = 1024)(
+    val logger = Slf4jLogger.getLogger[IO]
+    def apply(
+        socket: Socket[IO],
+        readTimeout: Option[FiniteDuration] = None,
+        outputBound: Int = 1024
+    )(
         implicit c: Concurrent[IO]
     ): IO[KMessageSocket] =
       for {
@@ -414,24 +421,30 @@ object protocol {
 
         override def read: Stream[IO, KPacket] = {
           val readSocket = socket
-            .reads()
+            .reads(readTimeout)
             .flatMap { packet =>
-              Stream
-                .chunk(packet.bytes)
-                .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
-                .map((packet.remote, _))
+              Stream.eval_(logger.debug("reading")) ++
+                Stream
+                  .chunk(packet.bytes)
+                  .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
+                  .map((packet.remote, _))
+                  .evalTap {
+                    case (r, m) =>
+                      logger.debug(s"read: $m")
+                  }
             }
 
           val writeOutput = outgoing.dequeue
             .flatMap {
               case (remote, msg) =>
-                Stream
-                  .emit(msg)
-                  .through(StreamEncoder.many(KMessage.codec).toPipeByte[IO])
-                  .chunks
-                  .map(data => Packet(remote, data))
+                Stream.eval_(logger.debug(s"write: $msg")) ++
+                  Stream
+                    .emit(msg)
+                    .through(StreamEncoder.many(KMessage.codec).toPipeByte[IO])
+                    .chunks
+                    .map(data => Packet(remote, data))
             }
-            .through(socket.writes())
+            .through(socket.writes(readTimeout))
 
           readSocket.concurrently(writeOutput)
         }
@@ -442,20 +455,27 @@ object protocol {
         ): IO[Unit] = outgoing.enqueue1((remote, msg))
       }
 
-    def createSocket(sg: SocketGroup, port: Option[Port] = None)(
+    def createSocket(
+        sg: SocketGroup,
+        readTimeout: Option[FiniteDuration] = None,
+        port: Option[Port] = None
+    )(
         implicit c: Concurrent[IO],
         cs: ContextShift[IO]
     ): Stream[IO, KMessageSocket] = {
 
-      val logSocket = Resource.make(IO(println("new socket")))(
-        _ => IO(println("closed socket"))
-      )
-
       Stream
         .resource {
           sg.open(new InetSocketAddress(port.map(_.value).getOrElse(0)))
+            .flatMap { s =>
+              def close() = {
+                logger.debug("close") *> s.close
+
+              }
+              Resource(IO(s).map(_ -> close))
+            }
         }
-        .flatMap(socket => Stream.eval(KMessageSocket(socket)))
+        .flatMap(socket => Stream.eval(KMessageSocket(socket, readTimeout)))
 
     }
   }
