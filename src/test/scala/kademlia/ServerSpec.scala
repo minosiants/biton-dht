@@ -22,7 +22,7 @@ class ServerSpec extends KSuite {
           val s = Server.start(sg, serverNode.nodeId, serverNode.contact.port)
           val c =
             f(Client(clientNodeId, serverNode.contact, sg))
-          Client.extract(c.concurrently(s))
+          Client.extractStrict(c.concurrently(s))
 
         }
       }

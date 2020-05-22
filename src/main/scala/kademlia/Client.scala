@@ -1,6 +1,7 @@
 package kademlia
 
 import java.net.InetSocketAddress
+import java.nio.channels.InterruptedByTimeoutException
 
 import cats.syntax.eq._
 import cats.effect.{ Concurrent, ContextShift, IO }
@@ -24,15 +25,17 @@ import cats.Show
 import cats.syntax.apply._
 import cats.syntax.show._
 
+import scala.concurrent.duration._
+
 trait Client {
 
   def ping(id: NodeId): Stream[IO, NodeIdResponse]
-  def pingF(id: NodeId): IO[NodeIdResponse] = Client.extract(ping(id))
+  def pingF(id: NodeId): IO[Option[NodeIdResponse]] = Client.extract(ping(id))
   def findNode(target: NodeId): Stream[IO, FindNodeResponse]
-  def findNodeF(target: NodeId): IO[FindNodeResponse] =
+  def findNodeF(target: NodeId): IO[Option[FindNodeResponse]] =
     Client.extract(findNode(target))
   def getPeers(infoHash: InfoHash): Stream[IO, GetPeersResponse]
-  def getPeersF(infoHash: InfoHash): IO[GetPeersResponse] =
+  def getPeersF(infoHash: InfoHash): IO[Option[GetPeersResponse]] =
     Client.extract(getPeers((infoHash)))
   def announcePeer(
       impliedPort: ImpliedPort,
@@ -46,13 +49,19 @@ trait Client {
       infoHash: InfoHash,
       port: Port,
       token: Token
-  ): IO[NodeIdResponse] =
+  ): IO[Option[NodeIdResponse]] =
     Client.extract(announcePeer(impliedPort, infoHash, port, token))
 }
 
 object Client {
+  val logger = Slf4jLogger.getLogger[IO]
 
-  def apply(id: NodeId, contact: Contact, sg: SocketGroup)(
+  def apply(
+      id: NodeId,
+      contact: Contact,
+      sg: SocketGroup,
+      readTimeout: Option[FiniteDuration] = Some(2.seconds)
+  )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO]
   ) = {
@@ -60,7 +69,7 @@ object Client {
 
     val remote =
       new InetSocketAddress(contact.ip.toInetAddress, contact.port.value)
-    def socket = KMessageSocket.createSocket(sg)
+    def socket = KMessageSocket.createSocket(sg, readTimeout)
 
     type RespFunc[A <: KMessage] = PartialFunction[KPacket, IO[A]]
 
@@ -75,7 +84,7 @@ object Client {
       }
       val badResponse: RespFunc[A] = {
         case (_, RpcErrorMessage(_, e @ RpcError(_, _))) =>
-          IO.raiseError(Error.ClientError(e.show))
+          IO.raiseError(Error.KRPCError(e.show))
         case (_, res) =>
           IO.raiseError(Error.ClientError(s"Unexpected response. $res"))
       }
@@ -83,12 +92,29 @@ object Client {
       socket
         .flatMap { s =>
           Stream.eval_(s.write1(remote, msg)).drain ++
+            Stream.eval_(logger.debug("write1 done")) ++
             s.read
         }
         .evalMap {
           badTransactionId orElse pf orElse badResponse
         }
         .head
+        .handleErrorWith {
+          case _: InterruptedByTimeoutException =>
+            Stream.eval_(logger.error(s"Timeout")) ++ Stream.empty
+          case e @ Error.KRPCError(_) =>
+            Stream.eval_(logger.error(Show[Error].show(e))) ++
+              Stream.eval_(logger.debug(s" message: $msg")) ++
+              Stream.empty
+          case e @ Error.ClientError(_) =>
+            Stream.eval_(logger.error(Show[Error].show(e))) ++
+              Stream.eval_(logger.debug(s" message: $msg")) ++
+              Stream.empty
+          case e: Throwable =>
+            Stream.eval_(logger.error(e.getMessage)) ++
+              Stream.eval_(logger.debug(s"message: $msg")) ++
+              Stream.empty
+        }
     }
 
     new Client() {
@@ -139,10 +165,14 @@ object Client {
       }
     }
   }
-  def extract[A](s: Stream[IO, A]): IO[A] =
+  def extract[A](s: Stream[IO, A]): IO[Option[A]] =
+    s.compile.toList.map(_.headOption)
+
+  def extractStrict[A](s: Stream[IO, A]): IO[A] =
     s.compile.toList.flatMap(
       _.headOption.fold(
         IO.raiseError[A](Error.ServerError("Not found"))
       )(v => IO(v))
     )
+
 }

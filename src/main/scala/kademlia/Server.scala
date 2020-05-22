@@ -31,7 +31,7 @@ object Server {
 
     Stream.eval_(logger.info(s"Starting server on port $port")) ++
       KMessageSocket
-        .createSocket(sg, port.some)
+        .createSocket(sg, None, port.some)
         .flatMap { s =>
           s.read.evalMap {
             case (remote, KMessage.Ping(t, senderId)) =>

@@ -17,4 +17,5 @@ target
 tests.iml
 .bloop
 .metals
+.kad
 project/metals.sbt

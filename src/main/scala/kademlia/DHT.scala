@@ -1,21 +1,18 @@
 package kademlia
 
-import java.net.InetSocketAddress
+import java.nio.channels.InterruptedByTimeoutException
 import java.time.Clock
 
-import cats.Applicative
-import cats.data.{ NonEmptyList, NonEmptyVector }
-import cats.effect.concurrent.Ref
 import cats.effect.{ Concurrent, ContextShift, IO }
-import kademlia.protocol.Peer
+/*import cats.syntax.order._
+import cats.syntax.eq._
+import cats.instances.list._*/
+import cats.implicits._
 import com.comcast.ip4s._
-import cats.instances.option
+import fs2.Stream
 import fs2.io.udp.SocketGroup
-import kademlia.KBucket.{ Cache, FullBucket }
-import kademlia.types.{ Contact, Index, KSize, Node, NodeId, Prefix }
-import io.estatico.newtype.macros.newtype
-import fs2._
-import cats.syntax.order._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import kademlia.types.{ Contact, Node, NodeId }
 
 trait DHT {
   //
@@ -27,13 +24,18 @@ trait DHT {
 }
 
 object DHT {
-
-  def createContact(
+  val logger = Slf4jLogger.getLogger[IO]
+  def bootstrapNode(
       hostname: Hostname,
       port: Port = Port(6881).get
-  ): IO[Contact] = {
+  ): IO[Node] = {
+    println(hostname.toString.getBytes().size)
     hostname.resolve
-      .map(_.map(ip => Contact(ip, port)))
+      .map(
+        _.map(
+          ip => Node(NodeId.fromString(hostname.toString), Contact(ip, port))
+        )
+      )
       .flatMap(
         v =>
           IO.fromEither(
@@ -42,10 +44,10 @@ object DHT {
       )
   }
 
-  val transmissionbt = createContact(host"dht.transmissionbt.com")
-  val bittorrent     = createContact(host"router.bittorrent.com")
-  val utorrent       = createContact(host"router.utorrent.com")
-  val silotis        = createContact(host"router.silotis.us")
+  val transmissionbt = bootstrapNode(host"dht.transmissionbt.com")
+  val bittorrent     = bootstrapNode(host"router.bittorrent.com")
+  val utorrent       = bootstrapNode(host"router.utorrent.com")
+  val silotis        = bootstrapNode(host"router.silotis.us")
 
   val nodeId = NodeId.gen()
 
@@ -65,30 +67,52 @@ object DHT {
       }
     }
     def go(table: Table, nodes: List[Node]): IO[Table] = {
-      val result = Stream
-        .emits(nodes)
-        .take(3)
-        .map { n =>
-          Client(nodeId, n.contact, sg).findNode(table.nodeId).map(_.nodes)
-        }
-        .parJoin(3)
-        .compile
-        .toList
-        .map(_.flatten)
+      lazy val newNodes =
+        Stream
+          .emits(nodes)
+          .take(8)
+          .map { n =>
+            Client(nodeId, n.contact, sg)
+              .findNode(table.nodeId)
+              .map(_.nodes)
+          }
+          .parJoin(3)
+          .flatMap(Stream.emits(_))
+          .compile
+          .toList
 
+      def saveNodes(n: List[Node]) = {
+        val sorted   = sortNodes(table.nodeId, n.toSet.toList)
+        val continue = nodes.nonEmpty && sorted =!= nodes
+        for {
+          _ <- logger.debug(s"sorted: $sorted hasChanges: $continue")
+          updated <- if (continue) IO.fromEither(table.addNodes(n))
+          else IO(table)
+          _ <- logger.debug(s"nodes: ${nodes.size}  ${nodes}")
+          _ <- logger.debug(
+            s"table size: ${updated.size} bsize: ${updated.bsize}"
+          )
+          rr <- if (continue) go(updated, sorted) else IO(table)
+        } yield rr
+      }
       for {
-        n <- result
-        sorted = sortNodes(table.nodeId, n)
-        updated <- IO.fromEither(table.addNodes(n))
-        rr      <- go(updated, sorted)
-      } yield rr
+        _ <- logger.debug(s"nodes size: ${nodes.size}")
+        n <- newNodes
+        _ <- logger.debug(s"go result: $n")
+        t <- if (n.isEmpty && nodes.drop(8).nonEmpty) go(table, nodes.drop(8))
+        else saveNodes(n)
+      } yield t
 
     }
     for {
-      table   <- Table.empty(nodeId)
-      contact <- transmissionbt
-      nodes   <- Client(nodeId, contact, sg).findNodeF(nodeId).map(_.nodes)
-      result  <- go(table, nodes)
+      table <- Table.empty(nodeId)
+      _     <- logger.debug(s"empty table is created $table")
+      // contact <- transmissionbt
+      bnode <- bittorrent
+      // bnode <- silotis
+      _      <- logger.debug(s"contact is created $bnode")
+      result <- go(table, List(bnode))
+      _      <- logger.debug(s"result size: ${result.size}")
     } yield result
 
   }

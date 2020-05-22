@@ -16,9 +16,35 @@ class NodeIdSute extends KSuite {
     }
 
   }
+  test("closest") {
+    forAll(intTripleGen) {
+      case (a, b, c) =>
+        val aId = NodeId.fromInt(a)
+        val bId = NodeId.fromInt(b)
+        val cId = NodeId.fromInt(c)
+        val res = cId.closest(aId, bId)(
+          aId,
+          bId
+        )
+        val ax = a ^ c
+        val bx = b ^ c
+
+        if (ax < bx)
+          res === aId
+        else
+          res === bId
+
+    }
+  }
 
   val intPairGen: Gen[(Int, Int)] = for {
     a <- Gen.posNum[Int]
     b <- Gen.posNum[Int]
   } yield (a, b)
+
+  val intTripleGen: Gen[(Int, Int, Int)] = for {
+    a <- Gen.posNum[Int]
+    b <- Gen.posNum[Int]
+    c <- Gen.posNum[Int]
+  } yield (a, b, c)
 }
