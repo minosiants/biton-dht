@@ -1,6 +1,6 @@
 import cats.Order
 import kademlia.syntax.Syntax
-import kademlia.types.NodeId
+import kademlia.types.{ NodeId, Prefix }
 import scodec.bits.{ BitVector, ByteVector }
 
 import scala.Function.const

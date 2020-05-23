@@ -6,21 +6,27 @@ import cats.Eq
 import cats.data.NonEmptyList
 import cats.implicits._
 import io.estatico.newtype.macros._
-import kademlia.KBucket.{ Cache, splitNodes }
+import kademlia.KBucket.{ Cache, highestPrefix, lowestPrefix, splitNodes }
 import kademlia.types._
+import scodec.bits.BitVector
 
 sealed abstract class KBucket extends Product with Serializable {
   def prefix: Prefix
   def nodes: Nodes
   def cache: Cache
   def lastUpdated: LocalDateTime
+  def isFull: Boolean = this match {
+    case KBucket.EmptyBucket(_, _, _, _) => false
+    case KBucket.Bucket(_, _, _, _)      => false
+    case KBucket.FullBucket(_, _, _, _)  => true
+  }
 
   def nextPrefix: Result[Prefix] =
     Either.cond(
-      prefix.value != highestNodeId,
-      Prefix((prefix.value.not >>> 1).not),
+      prefix =!= lowestPrefix,
+      if (prefix === highestPrefix) prefix.set(0) else prefix >>> 1,
       Error.KBucketError(
-        s"Not aible to create next prefix. Already the last one - $prefix "
+        s"Not able to create next prefix. Already the last one - $prefix "
       )
     )
 
@@ -64,6 +70,9 @@ sealed abstract class KBucket extends Product with Serializable {
 }
 
 object KBucket {
+
+  val highestPrefix: Prefix = Prefix(BitVector.low(idLength))
+  val lowestPrefix: Prefix  = Prefix(BitVector.low(idLength).set(idLength - 1))
 
   @newtype final case class Cache(value: Nodes)
 
