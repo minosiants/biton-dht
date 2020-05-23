@@ -32,8 +32,9 @@ trait PrefixSyntax {
 }
 
 final class PrefixOps(val prefix: Prefix) extends AnyVal {
-  def toNodeId: NodeId = NodeId(prefix.value)
-
+  def toNodeId: NodeId     = NodeId(prefix.value)
+  def set(n: Long): Prefix = Prefix(prefix.value.set(n))
+  def >>>(n: Int): Prefix  = Prefix(prefix.value >>> n)
   def toDecStr: String = {
     val d = sizedList(4, uint32)
     val result = d

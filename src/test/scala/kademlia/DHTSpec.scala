@@ -20,7 +20,7 @@ import java.io.{
 }
 
 class DHTSpec extends KSuite with TableFunctions {
-  test("bootstrap".ignore) {
+  test("bootstrap") {
 
     val bs = Blocker[IO]
       .use { blocker =>
@@ -60,6 +60,9 @@ class DHTSpec extends KSuite with TableFunctions {
       _     <- saveTable(table)
     } yield table).attempt.unsafeRunSync()
 
+    res.leftMap {
+      case e: Error => println(e.show)
+    }
     println(res.map(_.nodeId.value.toBin))
     println("--")
     println(
@@ -70,7 +73,7 @@ class DHTSpec extends KSuite with TableFunctions {
     true
   }
 
-  test("load".ignore) {
+  test("load") {
     def objectInputStream(path: Path): Resource[IO, ObjectInputStream] = {
       Resource.make {
         IO {
@@ -84,7 +87,7 @@ class DHTSpec extends KSuite with TableFunctions {
       }
     }
     val tableRes = objectInputStream(
-      Path.of("33ec9ac8f2dc8f10982037f5cb9fe9297eef4cbe.kad")
+      Path.of("2bec44347b590a91f42c5bbd337494bda22d191d.kad")
     ).use { o =>
       IO(o.readObject().asInstanceOf[KTable])
     }
@@ -93,10 +96,30 @@ class DHTSpec extends KSuite with TableFunctions {
       _ = println(table)
     } yield table).attempt.unsafeRunSync().toOption.get
 
-    println(res.nodeId.toDecStr)
+    println(res.isFull)
+    println(res.nodeId.value.toHex)
     // println(formatBucket(res.kbuckets.head))
     //println(formatBucket(res.kbuckets.tail.head))
-    println(res.kbuckets.map(_.prefix.toDecStr).toVector.mkString("\n"))
+    println(res.kbuckets.map(_.prefix.value.toBin).toVector.mkString("\n"))
+
+  }
+
+  test("bla".only) {
+    val v1 = BitVector.fromByte(256.toByte)
+    val v2 = v1.set(7)
+
+    println(BitVector(Math.pow(2, 8).toByte).toBin)
+
+    println(BitVector(Math.pow(2, 7).toByte).toBin)
+    println(v2.toBin)
+
+    println(BitVector(Math.pow(2, 6).toByte).toBin)
+    println(BitVector(Math.pow(2, 5).toByte).toBin)
+    println(BitVector(Math.pow(2, 4).toByte).toBin)
+    println(BitVector(Math.pow(2, 3).toByte).toBin)
+    println(BitVector(Math.pow(2, 2).toByte).toBin)
+    println(BitVector(Math.pow(2, 1).toByte).toBin)
+    println(BitVector(Math.pow(2, 0).toByte).toBin)
 
   }
 

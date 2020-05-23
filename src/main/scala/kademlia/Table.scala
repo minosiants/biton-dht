@@ -21,9 +21,14 @@ trait Table extends Product with Serializable {
   def kbuckets: NonEmptyVector[KBucket]
   def addNode(node: Node): Result[Table]
   def addNodes(nodes: List[Node]): Result[Table]
+  def isFull: Boolean =
+    kbuckets.head.prefix === Table.lastPrefix && kbuckets.head.isFull
+  def nonFull: Boolean = !isFull
 }
 
 object Table {
+  val lastPrefix = Prefix(highestNodeId)
+
   type IndexKBucket = (Index, KBucket)
 
   def empty(
@@ -66,12 +71,12 @@ final case class KTable(
         res.fold(identity, identity)
     }
   }
-  def updateBucket(
+  def addNodeToBucket(
       node: Node,
       bucket: KBucket
   ): Result[NonEmptyVector[KBucket]] = {
-    (bucket.prefix === kbuckets.head.prefix, bucket) match {
-      case (true, b @ FullBucket(_, nodes, _, _)) =>
+    (nonFull, bucket.prefix === kbuckets.head.prefix, bucket) match {
+      case (true, true, b @ FullBucket(_, _, _, _)) =>
         //Is one split enough ?
         b.split().flatMap {
           case (first, second) =>
@@ -82,14 +87,17 @@ final case class KTable(
                 .addToCache(node) map (NonEmptyVector.of(first, _))
             )
         }
-      case (_, bucket) =>
+      case (false, true, b @ FullBucket(_, _, _, _)) =>
+        b.addToCache(node) map (NonEmptyVector.of(_))
+
+      case (_, _, bucket) =>
         (bucket.add(node) orElse bucket.addToCache(node))
           .map(NonEmptyVector.one)
     }
 
   }
 
-  def updateKBuckets(
+  def insertBuckets(
       index: Index,
       buckets: NonEmptyVector[KBucket]
   ): NonEmptyVector[KBucket] = {
@@ -103,8 +111,8 @@ final case class KTable(
   override def addNode(node: Node): Result[Table] = {
     val (i, kb) = findBucketFor(node)
     for {
-      list <- updateBucket(node, kb)
-      res = updateKBuckets(i, list.reverse)
+      list <- addNodeToBucket(node, kb)
+      res = insertBuckets(i, list.reverse)
     } yield KTable(nodeId, res)
   }
 
