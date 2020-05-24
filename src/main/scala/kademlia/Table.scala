@@ -21,13 +21,9 @@ trait Table extends Product with Serializable {
   def kbuckets: NonEmptyVector[KBucket]
   def addNode(node: Node): Result[Table]
   def addNodes(nodes: List[Node]): Result[Table]
-  def isFull: Boolean =
-    kbuckets.head.prefix === Table.lastPrefix && kbuckets.head.isFull
-  def nonFull: Boolean = !isFull
 }
 
 object Table {
-  val lastPrefix = Prefix(highestNodeId)
 
   type IndexKBucket = (Index, KBucket)
 
@@ -52,7 +48,7 @@ final case class KTable(
     extends Table {
 
   def findBucketFor(
-      node: Node
+      id: NodeId
   ): Table.IndexKBucket = {
     (kbuckets.head, kbuckets.tail) match {
       case (h, IndexedSeq()) =>
@@ -62,7 +58,7 @@ final case class KTable(
           (Index(0), h)
         ) {
           case ((i, fb), sb) =>
-            node.nodeId.closest(fb.prefix.toNodeId, sb.prefix.toNodeId)(
+            id.closest(fb.prefix.toNodeId, sb.prefix.toNodeId)(
               (i, fb).asLeft,
               (i add 1, sb).asRight
             )
@@ -75,7 +71,9 @@ final case class KTable(
       node: Node,
       bucket: KBucket
   ): Result[NonEmptyVector[KBucket]] = {
-    (nonFull, bucket.prefix === kbuckets.head.prefix, bucket) match {
+    val (i, ownerBucket) = findBucketFor(nodeId)
+    val canSplit         = bucket.prefix.next.nonLow
+    (canSplit, bucket.prefix === ownerBucket.prefix, bucket) match {
       case (true, true, b @ FullBucket(_, _, _, _)) =>
         //Is one split enough ?
         b.split().flatMap {
@@ -87,7 +85,7 @@ final case class KTable(
                 .addToCache(node) map (NonEmptyVector.of(first, _))
             )
         }
-      case (false, true, b @ FullBucket(_, _, _, _)) =>
+      case (_, false, b @ FullBucket(_, _, _, _)) =>
         b.addToCache(node) map (NonEmptyVector.of(_))
 
       case (_, _, bucket) =>
@@ -109,7 +107,7 @@ final case class KTable(
   }
 
   override def addNode(node: Node): Result[Table] = {
-    val (i, kb) = findBucketFor(node)
+    val (i, kb) = findBucketFor(node.nodeId)
     for {
       list <- addNodeToBucket(node, kb)
       res = insertBuckets(i, list.reverse)

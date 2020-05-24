@@ -83,7 +83,7 @@ object DHT {
 
       def saveNodes(n: List[Node]) = {
         val sorted   = sortNodes(table.nodeId, n.toSet.toList)
-        val continue = table.nonFull && nodes.nonEmpty && sorted =!= nodes
+        val continue = nodes.nonEmpty && sorted =!= nodes
         for {
           _ <- logger.debug(s"sorted: $sorted hasChanges: $continue")
           updated <- if (continue) IO.fromEither(table.addNodes(n))
