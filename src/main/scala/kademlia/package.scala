@@ -1,13 +1,12 @@
 import cats.Order
+import cats.instances.either._
+import cats.instances.list._
+import cats.syntax.either._
+import cats.syntax.foldable._
 import kademlia.syntax.Syntax
-import kademlia.types.{ NodeId, Prefix }
 import scodec.bits.{ BitVector, ByteVector }
 
 import scala.Function.const
-import cats.syntax.foldable._
-import cats.instances.list._
-import cats.syntax.either._
-import cats.instances.either._
 
 package object kademlia extends Codecs with Syntax {
 

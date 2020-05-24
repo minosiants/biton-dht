@@ -20,7 +20,7 @@ import java.io.{
 }
 
 class DHTSpec extends KSuite with TableFunctions {
-  test("bootstrap") {
+  test("bootstrap".ignore) {
 
     val bs = Blocker[IO]
       .use { blocker =>
@@ -95,8 +95,6 @@ class DHTSpec extends KSuite with TableFunctions {
       table <- tableRes
       _ = println(table)
     } yield table).attempt.unsafeRunSync().toOption.get
-
-    println(res.isFull)
     println(res.nodeId.value.toHex)
     // println(formatBucket(res.kbuckets.head))
     //println(formatBucket(res.kbuckets.tail.head))

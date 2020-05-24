@@ -21,14 +21,16 @@ class TableSpec extends KSuite with TableFunctions {
   }
 
   test("add to table with full bucket") {
-    forAll(kbucketGen(0, ksize, ksize.value), nodeGen, nodeIdIntGen) {
-      (kbucket, node, nodeId) =>
+    forAll(kbucketGen(0, ksize, ksize.value), nodeIdIntGen) {
+      (kbucket, nodeId) =>
         val table = Table.empty(nodeId, ksize)
         val result =
           table
             .map { t =>
               for {
                 t2 <- t.addNodes(kbucket.nodes.value)
+                h    = kbucket.nodes.value.head
+                node = createNodes(h.nodeId, h, 1).head
                 t3 <- t2.addNode(node)
               } yield t3
             }
