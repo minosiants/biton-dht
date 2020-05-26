@@ -2,13 +2,15 @@ package kademlia
 
 trait TableFunctions {
   def formatBucket(kb: KBucket): String = {
-    val prefix   = kb.prefix.value.toBin
-    val nodeIds  = kb.nodes.value.map(_.nodeId.value.toBin).mkString("\n")
-    val cacheIds = kb.cache.value.value.map(_.nodeId.value.toBin).mkString("\n")
+    val from    = kb.from.value
+    val to      = kb.to.value
+    val nodeIds = kb.nodes.value.map(_.nodeId.toPrefix.value).mkString("\n")
+    val cacheIds =
+      kb.cache.value.value.map(_.nodeId.toPrefix.value).mkString("\n")
     s"""
        |===========================================
-       |prefix
-       |$prefix
+       |bucket
+       |$from = $to
        |------------------------------------------
        |nodeId
        |$nodeIds
@@ -20,6 +22,6 @@ trait TableFunctions {
   }
 
   def formatPrfexes(t: Table): String = {
-    t.kbuckets.map(_.prefix.value.toBin).toVector.mkString("\n")
+    t.kbuckets.map(_.from.value).toVector.mkString("\n")
   }
 }

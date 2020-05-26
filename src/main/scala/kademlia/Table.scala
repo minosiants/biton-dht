@@ -12,6 +12,9 @@ import kademlia.KBucket.{ Cache, FullBucket }
 import kademlia.types._
 import cats.instances.int._
 import cats.syntax.eq._
+
+import cats.syntax.apply._
+
 import scala.annotation.tailrec
 
 trait Table extends Product with Serializable {
@@ -25,17 +28,19 @@ trait Table extends Product with Serializable {
 
 object Table {
 
-  type IndexKBucket = (Index, KBucket)
+  type IndexKBucket = (KBucket, Index)
 
   def empty(
       nodeId: NodeId,
-      ksize: KSize = KSize(8)
-  )(implicit c: Concurrent[IO], clock: Clock): IO[Table] = {
-    val prefix = Prefix(lowestNodeId)
-    val nodes  = Nodes(List.empty, ksize)
-    val cache  = Cache(Nodes(List.empty, ksize * 3))
+      ksize: KSize = KSize(8),
+      lowerPrefix: Prefix = Prefix(0),
+      higherPrefix: Prefix = Prefix(BigInt(2).pow(160))
+  )(implicit clock: Clock): Result[Table] = {
+
+    val nodes = Nodes(List.empty, ksize)
+    val cache = Cache(Nodes(List.empty, ksize * 3))
     for {
-      b <- IO.fromEither(KBucket.create(prefix, nodes, cache))
+      b <- KBucket.create(lowerPrefix, higherPrefix, nodes, cache)
     } yield KTable(nodeId, NonEmptyVector.of(b))
 
   }
@@ -49,44 +54,30 @@ final case class KTable(
 
   def findBucketFor(
       id: NodeId
-  ): Table.IndexKBucket = {
-    (kbuckets.head, kbuckets.tail) match {
-      case (h, IndexedSeq()) =>
-        (Index(0), h)
-      case (h, tail) =>
-        val res = tail.foldM[Either[Table.IndexKBucket, *], Table.IndexKBucket](
-          (Index(0), h)
-        ) {
-          case ((i, fb), sb) =>
-            id.closest(fb.prefix.toNodeId, sb.prefix.toNodeId)(
-              (i, fb).asLeft,
-              (i add 1, sb).asRight
-            )
-
-        }
-        res.fold(identity, identity)
-    }
+  ): Result[Table.IndexKBucket] = {
+    kbuckets.zipWithIndex
+      .find { case (kb, _) => kb.inRange(id) }
+      .map { case (kb, i) => (kb, Index(i)) }
+      .toRight(Error.KBucketError(s"bucket for $nodeId not found"))
   }
   def addNodeToBucket(
       node: Node,
       bucket: KBucket
   ): Result[NonEmptyVector[KBucket]] = {
-    val (i, ownerBucket) = findBucketFor(nodeId)
-    val canSplit         = bucket.prefix.next.nonLow
-    (canSplit, bucket.prefix === ownerBucket.prefix, bucket) match {
-      case (true, true, b @ FullBucket(_, _, _, _)) =>
-        //Is one split enough ?
+
+    (bucket.canSplit, bucket.inRange(nodeId), bucket) match {
+      case (true, true, b @ FullBucket(_, _, _, _, _)) =>
         b.split().flatMap {
           case (first, second) =>
-            node.nodeId.closest(first.prefix.toNodeId, second.prefix.toNodeId)(
-              first.add(node) orElse first
-                .addToCache(node) map (NonEmptyVector.of(_, second)),
-              second.add(node) orElse second
-                .addToCache(node) map (NonEmptyVector.of(first, _))
-            )
+            if (first.inRange(node.nodeId))
+              (first.add(node) orElse first
+                .addToCache(node)) map (NonEmptyVector.of(_, second))
+            else
+              (second.add(node) orElse second
+                .addToCache(node)) map (NonEmptyVector.of(first, _))
         }
-      case (_, false, b @ FullBucket(_, _, _, _)) =>
-        b.addToCache(node) map (NonEmptyVector.of(_))
+      case (_, false, b @ FullBucket(_, _, _, _, _)) =>
+        b.addToCacheIfNew(node) map (NonEmptyVector.of(_))
 
       case (_, _, bucket) =>
         (bucket.add(node) orElse bucket.addToCache(node))
@@ -107,9 +98,11 @@ final case class KTable(
   }
 
   override def addNode(node: Node): Result[Table] = {
-    val (i, kb) = findBucketFor(node.nodeId)
+
     for {
-      list <- addNodeToBucket(node, kb)
+      (kb, i) <- findBucketFor(node.nodeId)
+      list    <- addNodeToBucket(node, kb)
+      _   = list.toVector.head.nodes
       res = insertBuckets(i, list.reverse)
     } yield KTable(nodeId, res)
   }

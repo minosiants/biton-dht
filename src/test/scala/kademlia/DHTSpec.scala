@@ -10,7 +10,7 @@ import cats.syntax.show._
 import fs2.io.udp.SocketGroup
 import fs2.Stream
 import boopickle.Default._
-import kademlia.types.NodeId
+import kademlia.types.{ NodeId, Prefix }
 import scodec.bits.BitVector
 import java.io.{
   FileInputStream,
@@ -20,12 +20,12 @@ import java.io.{
 }
 
 class DHTSpec extends KSuite with TableFunctions {
-  test("bootstrap".ignore) {
+  test("bootstrap") {
 
     val bs = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          DHT.bootstrap(sg)
+          DHT.bootstrap(sg).table
         }
       }
 
@@ -73,7 +73,7 @@ class DHTSpec extends KSuite with TableFunctions {
     true
   }
 
-  test("load") {
+  test("load".ignore) {
     def objectInputStream(path: Path): Resource[IO, ObjectInputStream] = {
       Resource.make {
         IO {
@@ -87,7 +87,7 @@ class DHTSpec extends KSuite with TableFunctions {
       }
     }
     val tableRes = objectInputStream(
-      Path.of("2bec44347b590a91f42c5bbd337494bda22d191d.kad")
+      Path.of("e1d4601dcde6f662bc6528a2ea54f8463fbe0951.kad")
     ).use { o =>
       IO(o.readObject().asInstanceOf[KTable])
     }
@@ -95,29 +95,12 @@ class DHTSpec extends KSuite with TableFunctions {
       table <- tableRes
       _ = println(table)
     } yield table).attempt.unsafeRunSync().toOption.get
-    println(res.nodeId.value.toHex)
-    // println(formatBucket(res.kbuckets.head))
-    //println(formatBucket(res.kbuckets.tail.head))
-    println(res.kbuckets.map(_.prefix.value.toBin).toVector.mkString("\n"))
+    println(res.nodeId.value.toBin)
+    res.kbuckets.toVector.foreach { v =>
+      println(formatBucket(v))
+    }
 
-  }
-
-  test("bla".only) {
-    val v1 = BitVector.fromByte(256.toByte)
-    val v2 = v1.set(7)
-
-    println(BitVector(Math.pow(2, 8).toByte).toBin)
-
-    println(BitVector(Math.pow(2, 7).toByte).toBin)
-    println(v2.toBin)
-
-    println(BitVector(Math.pow(2, 6).toByte).toBin)
-    println(BitVector(Math.pow(2, 5).toByte).toBin)
-    println(BitVector(Math.pow(2, 4).toByte).toBin)
-    println(BitVector(Math.pow(2, 3).toByte).toBin)
-    println(BitVector(Math.pow(2, 2).toByte).toBin)
-    println(BitVector(Math.pow(2, 1).toByte).toBin)
-    println(BitVector(Math.pow(2, 0).toByte).toBin)
+    println(res.kbuckets.map(_.from.value).toVector.mkString("\n"))
 
   }
 

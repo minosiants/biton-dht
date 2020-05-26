@@ -34,12 +34,14 @@ final case class Nodes(value: List[Node], ksize: KSize)
     Nodes(list, ksize)
   }
 
-  def isFull: Boolean   = value.size == ksize
-  def nonFull: Boolean  = !isFull
-  def isEmpty: Boolean  = value.isEmpty
-  def nonEmpty: Boolean = !isEmpty
+  def exists(node: Node): Boolean   = value.exists(_.nodeId == node.nodeId)
+  def nonExist(node: Node): Boolean = !exists(node)
+  def isFull: Boolean               = value.size == ksize
+  def nonFull: Boolean              = !isFull
+  def isEmpty: Boolean              = value.isEmpty
+  def nonEmpty: Boolean             = !isEmpty
 }
 
 object Nodes {
-  implicit val nodesEq: Eq[Nodes] = Eq.fromUniversalEquals
+  implicit val nodesEq2: Eq[Nodes] = Eq.fromUniversalEquals
 }

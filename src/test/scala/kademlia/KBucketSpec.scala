@@ -2,44 +2,54 @@ package kademlia
 import cats.syntax.either._
 import cats.syntax.partialOrder._
 import kademlia.KBucket.Cache
-import kademlia.types.{ KSize, NodeId }
+import kademlia.types.{ KSize, NodeId, Prefix }
 import org.scalacheck.Prop.forAll
+import cats.instances.list._
 
 class KBucketSpec extends KSuite {
 
-  val ksize = KSize(5)
+  val ksize = KSize(3)
+  val from  = Prefix(0)
+  val to    = Prefix(10)
+
+  def kbGen(ksize: KSize = ksize, nsize: Int = ksize.value) =
+    kbucketGen(from, to, ksize, nsize)
 
   test("add to full kbucket") {
-    forAll(kbucketGen(0, ksize, ksize.value), nodeGen) { (kbucket, node) =>
+    forAll(kbGen()) { kbucket =>
+      val id     = availableIds(kbucket).head
+      val node   = kbucket.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
       val result = kbucket.add(node)
       result === Error.KBucketError(s"$kbucket is full").asLeft
     }
   }
 
   test("add to empty kbucket") {
-    forAll(kbucketGen(0, ksize, 0), nodeGen) { (kbucket, node) =>
-      val result = kbucket.add(node)
-      result === KBucket.create(
-        kbucket.prefix,
-        Nodes(List(node), ksize),
-        kbucket.cache
-      )
+    forAll(kbGen(ksize, 0), nodeGen(nodeIdChooseGen(0, 10))) {
+      (kbucket, node) =>
+        val result = kbucket.add(node)
+        result === KBucket.create(
+          kbucket.from,
+          kbucket.to,
+          Nodes(List(node), ksize),
+          kbucket.cache
+        )
     }
   }
 
   test("add to kbucket") {
-    forAll(kbucketGen(0, ksize, 2), nodeGen) { (kbucket, node) =>
-      val result = kbucket.add(node)
-      val expected = Nodes(
-        kbucket.nodes.value.filterNot(_.nodeId == node.nodeId) :+ node,
-        ksize
-      )
-      result.map(_.nodes) === expected.asRight
+    forAll(kbGen(ksize, 2)) { kbucket =>
+      val node = kbucket.nodes.value.head
+      val result = for {
+        kb  <- kbucket.remove(node)
+        res <- kb.add(node)
+      } yield res
+      result.map(_.nodes.value) === kbucket.nodes.value.reverse.asRight
     }
   }
 
   test("add to kbucket cache") {
-    forAll(kbucketGen(0, ksize, ksize.value), nodeGen) { (kbucket, node) =>
+    forAll(kbGen(), nodeGen(nodeIdChooseGen(0, 10))) { (kbucket, node) =>
       val result = for {
         k  <- kbucket.addToCache(node)
         kk <- k.addToCache(node)
@@ -52,12 +62,13 @@ class KBucketSpec extends KSuite {
     }
 
     test("split kbucket") {
-      forAll(kbucketGen(0, ksize, ksize.value)) { kbucket =>
-        val result = for {
-          (first, second) <- kbucket.split()
-        } yield checkBuckets(first, second)
+      forAll(kbGen(ksize, 0), nodeGen(nodeIdChooseGen(0, 10))) {
+        (kbucket, node) =>
+          val result = for {
+            (first, second) <- kbucket.split()
+          } yield checkBuckets(first, second)
 
-        result == true.asRight
+          result == true.asRight
       }
     }
 
@@ -65,14 +76,10 @@ class KBucketSpec extends KSuite {
 
   def checkBuckets(first: KBucket, second: KBucket): Boolean = {
     val firstResult = first.nodes.value.foldLeft(true) { (v, n) =>
-      val f = n.nodeId.value ^ first.prefix.value
-      val s = n.nodeId.value ^ second.prefix.value
-      (NodeId(f) < NodeId(s)) && v
+      first.inRange(n.nodeId) && v
     }
     val secondResult = second.nodes.value.foldLeft(true) { (v, n) =>
-      val f = n.nodeId.value ^ first.prefix.value
-      val s = n.nodeId.value ^ second.prefix.value
-      (NodeId(f) > NodeId(s)) && v
+      second.inRange(n.nodeId) && v
     }
     firstResult && secondResult
   }

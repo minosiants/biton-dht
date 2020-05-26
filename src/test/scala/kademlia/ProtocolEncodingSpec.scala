@@ -28,7 +28,7 @@ class ProtocolEncodingSpec extends KSuite {
     }
   }
   property("list of nodes") {
-    forAll(Gen.nonEmptyListOf(nodeGen)) { l =>
+    forAll(Gen.nonEmptyListOf(nodeGen())) { l =>
       val encoded = Node.bencoder.encode(l)
       val decoded = encoded.flatMap(Node.bdecoder.decode)
       decoded === l.asRight
@@ -101,14 +101,14 @@ class ProtocolEncodingSpec extends KSuite {
   implicit val findNodeResponse: Gen[FindNodeResponse] = for {
     t      <- transactionGen
     nodeId <- nodeIdIntGen
-    nodes  <- Gen.nonEmptyListOf(nodeGen)
+    nodes  <- Gen.nonEmptyListOf(nodeGen())
   } yield FindNodeResponse(t, nodeId, nodes)
 
   implicit val getPeerNodesResponse: Gen[GetPeersNodesResponse] = for {
     t      <- transactionGen
     nodeId <- nodeIdIntGen
     token  <- tokenGen
-    nodes  <- Gen.nonEmptyListOf(nodeGen)
+    nodes  <- Gen.nonEmptyListOf(nodeGen())
   } yield GetPeersNodesResponse(t, nodeId, token, nodes)
 
   implicit val getPeersResponse: Gen[GetPeersResponse] = for {
