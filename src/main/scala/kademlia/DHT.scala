@@ -33,6 +33,7 @@ object DHT {
       cs: ContextShift[IO],
       clock: Clock
   ): DHT = new DHT {
+    val client = Client(nodeId, sg)
     override lazy val table: IO[Table] = {
       for {
         table  <- IO.fromEither(Table.empty(nodeId))
@@ -49,9 +50,10 @@ object DHT {
           .evals(nodes)
           .take(8)
           .map { n =>
-            Client(nodeId, n.contact, sg)
-              .findNode(nodeId)
+            client
+              .findNode(n.contact, nodeId)
               .map(_.nodes)
+
           }
           .parJoin(8)
           .flatMap(Stream.emits(_))
