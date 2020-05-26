@@ -29,6 +29,7 @@ sealed abstract class KBucket extends Product with Serializable {
 
   def isNewNode(node: Node): Boolean =
     nodes.nonExist(node)
+
   def nonNewNode(node: Node): Boolean = !isNewNode(node)
 
   def midpoint: Result[Prefix] = {
@@ -122,6 +123,10 @@ object KBucket {
 
   final case class Cache(value: Nodes) extends Product with Serializable {
     def filterNot(node: Node): Cache = Cache(value.filterNot(node))
+    def isEmpty: Boolean             = value.isEmpty
+    def nonEmpty: Boolean            = value.nonEmpty
+    def take(n: Int): Cache          = Cache(Nodes(value.value.take(n), value.ksize))
+    def drop(n: Int): Cache          = Cache(Nodes(value.value.drop(n), value.ksize))
   }
 
   object Cache {
@@ -162,7 +167,18 @@ object KBucket {
     assert(from < to, "'From' should be less than 'to'")
     if (nodes.isFull)
       FullBucket(from, to, nodes, cache, LocalDateTime.now(clock)).asRight
-    else if (nodes.isEmpty)
+    else if (nodes.isEmpty && cache.nonEmpty) {
+      val nodesFromCache =
+        cache.take(nodes.ksize.value - 1).value.copy(ksize = nodes.ksize)
+      Bucket(
+        from,
+        to,
+        nodesFromCache,
+        cache.drop(nodes.ksize.value - 1),
+        LocalDateTime.now(clock)
+      ).asRight
+
+    } else if (nodes.isEmpty)
       EmptyBucket(from, to, nodes, cache, LocalDateTime.now(clock)).asRight
     else
       Bucket(from, to, nodes, cache, LocalDateTime.now(clock)).asRight

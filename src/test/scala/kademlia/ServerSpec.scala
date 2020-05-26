@@ -21,19 +21,20 @@ class ServerSpec extends KSuite {
         SocketGroup[IO](blocker).use { sg =>
           val s = Server.start(sg, serverNode.nodeId, serverNode.contact.port)
           val c =
-            f(Client(clientNodeId, serverNode.contact, sg))
+            f(Client(clientNodeId, sg))
           Client.extractStrict(c.concurrently(s))
 
         }
       }
   test("ping") {
-    val result = sendToServer(_.ping(serverNode.nodeId)).attempt.unsafeRunSync()
+    val result = sendToServer(_.ping(serverNode)).attempt.unsafeRunSync()
     result.isRight
   }
 
   test("findNode") {
     val result =
-      sendToServer(_.findNode(serverNode.nodeId)).attempt.unsafeRunSync()
+      sendToServer(_.findNode(serverNode.contact, serverNode.nodeId)).attempt
+        .unsafeRunSync()
     result.isRight
   }
 }

@@ -29,15 +29,25 @@ import scala.concurrent.duration._
 
 trait Client {
 
-  def ping(id: NodeId): Stream[IO, NodeIdResponse]
-  def pingF(id: NodeId): IO[Option[NodeIdResponse]] = Client.extract(ping(id))
-  def findNode(target: NodeId): Stream[IO, FindNodeResponse]
-  def findNodeF(target: NodeId): IO[Option[FindNodeResponse]] =
-    Client.extract(findNode(target))
-  def getPeers(infoHash: InfoHash): Stream[IO, GetPeersResponse]
-  def getPeersF(infoHash: InfoHash): IO[Option[GetPeersResponse]] =
-    Client.extract(getPeers((infoHash)))
+  def ping(node: Node): Stream[IO, NodeIdResponse]
+  def pingF(node: Node): IO[Option[NodeIdResponse]] = Client.extract(ping(node))
+  def findNode(contact: Contact, target: NodeId): Stream[IO, FindNodeResponse]
+  def findNodeF(
+      contact: Contact,
+      target: NodeId
+  ): IO[Option[FindNodeResponse]] =
+    Client.extract(findNode(contact, target))
+  def getPeers(
+      contact: Contact,
+      infoHash: InfoHash
+  ): Stream[IO, GetPeersResponse]
+  def getPeersF(
+      contact: Contact,
+      infoHash: InfoHash
+  ): IO[Option[GetPeersResponse]] =
+    Client.extract(getPeers(contact, infoHash))
   def announcePeer(
+      contact: Contact,
       impliedPort: ImpliedPort,
       infoHash: InfoHash,
       port: Port,
@@ -45,12 +55,13 @@ trait Client {
   ): Stream[IO, NodeIdResponse]
 
   def announcePeerF(
+      contact: Contact,
       impliedPort: ImpliedPort,
       infoHash: InfoHash,
       port: Port,
       token: Token
   ): IO[Option[NodeIdResponse]] =
-    Client.extract(announcePeer(impliedPort, infoHash, port, token))
+    Client.extract(announcePeer(contact, impliedPort, infoHash, port, token))
 }
 
 object Client {
@@ -58,7 +69,6 @@ object Client {
 
   def apply(
       id: NodeId,
-      contact: Contact,
       sg: SocketGroup,
       readTimeout: Option[FiniteDuration] = Some(2.seconds)
   )(
@@ -67,13 +77,15 @@ object Client {
   ) = {
     val logger = Slf4jLogger.getLogger[IO]
 
-    val remote =
+    def remote(contact: Contact) =
       new InetSocketAddress(contact.ip.toInetAddress, contact.port.value)
     def socket = KMessageSocket.createSocket(sg, readTimeout)
 
     type RespFunc[A <: KMessage] = PartialFunction[KPacket, IO[A]]
 
-    def get[A <: KMessage](msg: KMessage)(pf: RespFunc[A]): Stream[IO, A] = {
+    def get[A <: KMessage](contact: Contact, msg: KMessage)(
+        pf: RespFunc[A]
+    ): Stream[IO, A] = {
       val badTransactionId: RespFunc[A] = {
         case (_, resp) if msg.t =!= resp.t =>
           IO.raiseError(
@@ -91,7 +103,7 @@ object Client {
 
       socket
         .flatMap { s =>
-          Stream.eval_(s.write1(remote, msg)).drain ++
+          Stream.eval_(s.write1(remote(contact), msg)).drain ++
             Stream.eval_(logger.debug("write1 done")) ++
             s.read
         }
@@ -118,33 +130,38 @@ object Client {
     }
 
     new Client() {
-      override def ping(id: NodeId): Stream[IO, NodeIdResponse] = {
-        get[NodeIdResponse](Ping(Transaction.gen(), id)) {
+      override def ping(node: Node): Stream[IO, NodeIdResponse] = {
+        get[NodeIdResponse](node.contact, Ping(Transaction.gen(), node.nodeId)) {
           case (_, r @ NodeIdResponse(_, _)) =>
             logger.debug(Show[KMessage].show(r)) *>
               IO(r)
         }
       }
 
-      override def findNode(target: NodeId): Stream[IO, FindNodeResponse] = {
+      override def findNode(
+          contact: Contact,
+          target: NodeId
+      ): Stream[IO, FindNodeResponse] = {
         val fn = FindNode(Transaction.gen(), id, target)
-        get[FindNodeResponse](fn) {
+        get[FindNodeResponse](contact, fn) {
           case (_, r @ FindNodeResponse(_, _, _)) =>
             IO(r)
         }
       }
 
       override def getPeers(
+          contact: Contact,
           infoHash: InfoHash
       ): Stream[IO, GetPeersResponse] = {
         val req = GetPeers(Transaction.gen(), id, infoHash)
-        get[GetPeersResponse](req) {
+        get[GetPeersResponse](contact, req) {
           case (_, r @ GetPeersResponse(_, _, _, _)) =>
             IO(r)
         }
       }
 
       override def announcePeer(
+          contact: Contact,
           impliedPort: ImpliedPort,
           infoHash: InfoHash,
           port: Port,
@@ -158,7 +175,7 @@ object Client {
           port,
           token
         )
-        get[NodeIdResponse](req) {
+        get[NodeIdResponse](contact, req) {
           case (_, r @ NodeIdResponse(_, _)) =>
             IO(r)
         }
