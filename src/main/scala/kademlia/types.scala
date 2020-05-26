@@ -22,14 +22,15 @@ object types {
     def +(i: Int): Index   = Index(value + i)
     def add(i: Int): Index = Index(value + i)
   }
-  @newtype final case class Prefix(value: BitVector)
+
+  @newtype final case class Prefix(value: BigInt)
 
   object Prefix {
 
     implicit val eqPrefix: Eq[Prefix] = Eq.instance(_.value === _.value)
 
-    implicit val orderPrefix: Order[Prefix] =
-      orderByteVector.contramap[Prefix](_.value.bytes)
+    /*implicit val orderPrefix: Order[Prefix] =
+      orderByteVector.contramap[Prefix](_.value.bytes)*/
   }
 
   final case class Contact(ip: IpAddress, port: Port)
@@ -75,6 +76,8 @@ object types {
   object NodeId {
 
     def fromInt(n: Int): NodeId = NodeId(BitVector.fromInt(n).padLeft(idLength))
+    def fromBigInt(n: BigInt): NodeId =
+      NodeId(BitVector(n.toByteArray).padLeft(idLength))
     def fromString(str: String): NodeId =
       NodeId(BitVector(str.getBytes().take(20)).padLeft(idLength))
     def gen(): NodeId = NodeId(Random.`20bytes`)

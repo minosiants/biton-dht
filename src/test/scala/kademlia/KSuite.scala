@@ -9,6 +9,9 @@ import kademlia.types.{ Contact, KSize, Node, NodeId, Prefix }
 import munit.ScalaCheckSuite
 import org.scalacheck.Gen
 import scodec.bits.BitVector
+import org.scalacheck.cats.implicits._
+import cats.instances.list._
+import cats.syntax.traverse._
 
 import scala.concurrent.ExecutionContext
 
@@ -47,24 +50,47 @@ class KSuite extends ScalaCheckSuite {
     port <- portGen
   } yield Contact(ip, port)
 
-  val nodeGen: Gen[Node] = for {
-    id      <- nodeIdCharGen
-    contact <- contactGen
-  } yield Node(id, contact)
-
-  def listOfNodesGen(size: Int): Gen[List[Node]] =
-    Gen
-      .infiniteStream(nodeGen)
-      .map(_.take(size * 30).toSet.take(size).toList)
-      .retryUntil(_.size == size)
-
-  def kbucketGen(prefix: Int, ksize: KSize, nsize: Int): Gen[KBucket] =
+  def nodeGen(nodeIdGen: Gen[NodeId] = nodeIdCharGen): Gen[Node] =
     for {
-      nodes <- listOfNodesGen(nsize).map(v => Nodes(v, ksize))
+      id      <- nodeIdGen
+      contact <- contactGen
+    } yield Node(id, contact)
+
+  def listOfNodesGen(
+      size: Int,
+      nodeIdGen: Gen[NodeId] = nodeIdCharGen
+  ): Gen[List[Node]] =
+    for {
+      list <- Gen
+        .infiniteStream(nodeIdGen)
+        .map(_.take(size * 30).toSet.take(size).toList)
+        .retryUntil(_.size == size)
+      res <- list.traverse(v => contactGen.map(Node(v, _)))
+    } yield res
+
+  def nodeIdChooseGen(from: Int, to: Int): Gen[NodeId] =
+    Gen.choose(from, to).map(NodeId.fromInt)
+
+  def kbucketGen(
+      from: Prefix,
+      to: Prefix,
+      ksize: KSize,
+      nsize: Int
+  ): Gen[KBucket] =
+    for {
+      nodes <- listOfNodesGen(
+        nsize,
+        nodeIdChooseGen(from.value.toInt, to.value.toInt - 1)
+      ).map(v => Nodes(v, ksize))
       cache <- listOfNodesGen(nsize).map(v => Cache(Nodes(v, ksize)))
-      pref = Prefix(NodeId.fromInt(prefix).value)
+
     } yield KBucket
-      .create(pref, nodes, cache)
+      .create(from, to, nodes, cache)
       .toOption
       .get
+
+  def availableIds(kb: KBucket): Set[Int] = {
+    val ids = kb.nodes.value.map(v => BigInt(v.nodeId.value.toByteArray).toInt)
+    Set.range(kb.from.value.toInt, kb.to.value.toInt) &~ ids.toSet
+  }
 }
