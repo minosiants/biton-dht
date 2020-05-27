@@ -24,8 +24,9 @@ import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import cats.Show
 import cats.syntax.apply._
 import cats.syntax.show._
-
+import cats.instances.list._
 import scala.concurrent.duration._
+import cats.syntax.either._
 
 trait Client {
 
@@ -40,12 +41,8 @@ trait Client {
   def getPeers(
       contact: Contact,
       infoHash: InfoHash
-  ): Stream[IO, GetPeersResponse]
-  def getPeersF(
-      contact: Contact,
-      infoHash: InfoHash
-  ): IO[Option[GetPeersResponse]] =
-    Client.extract(getPeers(contact, infoHash))
+  ): Stream[IO, Either[GetPeersNodesResponse, GetPeersResponse]]
+
   def announcePeer(
       contact: Contact,
       impliedPort: ImpliedPort,
@@ -62,6 +59,7 @@ trait Client {
       token: Token
   ): IO[Option[NodeIdResponse]] =
     Client.extract(announcePeer(contact, impliedPort, infoHash, port, token))
+
 }
 
 object Client {
@@ -152,11 +150,20 @@ object Client {
       override def getPeers(
           contact: Contact,
           infoHash: InfoHash
-      ): Stream[IO, GetPeersResponse] = {
+      ): Stream[IO, Either[GetPeersNodesResponse, GetPeersResponse]] = {
         val req = GetPeers(Transaction.gen(), id, infoHash)
-        get[GetPeersResponse](contact, req) {
+        get[KMessage](contact, req) {
           case (_, r @ GetPeersResponse(_, _, _, _)) =>
             IO(r)
+          case (_, r @ GetPeersNodesResponse(_, _, _, _)) =>
+            IO(r)
+        }.flatMap {
+          case r @ GetPeersNodesResponse(_, _, _, _) =>
+            Stream.emit(r.asLeft[GetPeersResponse])
+          case r @ GetPeersResponse(_, _, _, _) =>
+            Stream.emit(r.asRight[GetPeersNodesResponse])
+          case v =>
+            Stream.raiseError(Error.ClientError(s"Should not get $v here"))
         }
       }
 
@@ -180,6 +187,7 @@ object Client {
             IO(r)
         }
       }
+
     }
   }
   def extract[A](s: Stream[IO, A]): IO[Option[A]] =

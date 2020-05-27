@@ -3,17 +3,11 @@ package kademlia
 import java.time.Clock
 
 import cats.data.NonEmptyVector
-import cats.effect.{ Concurrent, IO }
-import cats.instances.either._
-import cats.instances.vector._
+import cats.instances.int._
 import cats.syntax.either._
 import cats.syntax.foldable._
 import kademlia.KBucket.{ Cache, FullBucket }
 import kademlia.types._
-import cats.instances.int._
-import cats.syntax.eq._
-
-import cats.syntax.apply._
 
 import scala.annotation.tailrec
 
@@ -24,6 +18,7 @@ trait Table extends Product with Serializable {
   def kbuckets: NonEmptyVector[KBucket]
   def addNode(node: Node): Result[Table]
   def addNodes(nodes: List[Node]): Result[Table]
+  def neighbors(nodeId: NodeId): List[Node]
 }
 
 object Table {
@@ -120,4 +115,8 @@ final case class KTable(
     go(this.asRight, nodes)
   }
 
+  override def neighbors(nodeId: NodeId): List[Node] = {
+    assert(kbuckets.nonEmpty)
+    kbuckets.filter(_.inRange(nodeId)).head.nodes.value
+  }
 }

@@ -6,7 +6,7 @@ import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
 import cats.{ Eq, Order }
 import cats.implicits._
-
+import kademlia.protocol.Token
 import scodec.Codec
 import scodec.codecs._
 
@@ -70,6 +70,18 @@ object types {
       BDecoder.sc[List[Node]](listNodeCodec)
 
   }
+
+  @newtype final case class Distance(value: BigInt) {
+    def >(other: Distance): Boolean = value > other.value
+    def <(other: Distance): Boolean = value < other.value
+  }
+
+  object Distance {
+    implicit val orderingDistance: Ordering[Distance] =
+      Ordering[BigInt].contramap(_.value)
+  }
+
+  final case class NodeInfo(token: Token, node: Node, distance: Distance)
 
   @newtype final case class NodeId(value: BitVector)
 
