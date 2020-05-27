@@ -23,47 +23,50 @@ trait Server {
 
 object Server {
   val logger = Slf4jLogger.getLogger[IO]
-  def start(
-      sg: SocketGroup,
-      id: NodeId,
-      port: Port
-  )(implicit c: Concurrent[IO], cs: ContextShift[IO]): Stream[IO, Unit] = {
 
-    Stream.eval_(logger.info(s"Starting server on port $port")) ++
-      KMessageSocket
-        .createSocket(sg, None, port.some)
-        .flatMap { s =>
-          s.read.evalMap {
-            case (remote, KMessage.Ping(t, senderId)) =>
-              logger.info("ping") *>
-                s.write1(remote, NodeIdResponse(t, id))
+  def apply(id: NodeId, sg: SocketGroup, port: Port)(
+      implicit c: Concurrent[IO],
+      cs: ContextShift[IO]
+  ): Server = new Server() {
 
-            case (remote, KMessage.FindNode(t, senderId, target)) =>
-              logger.debug("FindNode") *>
-                s.write1(remote, FindNodeResponse(t, id, List.empty))
+    override def start(): Stream[IO, Unit] = {
 
-            case (remote, KMessage.GetPeers(t, senderId, infohash)) =>
-              logger.debug("GetPeers") *>
-                s.write1(
+      Stream.eval_(logger.info(s"Starting server on port $port")) ++
+        KMessageSocket
+          .createSocket(sg, None, port.some)
+          .flatMap { s =>
+            s.read.evalMap {
+              case (remote, KMessage.Ping(t, senderId)) =>
+                logger.info("ping") *>
+                  s.write1(remote, NodeIdResponse(t, id))
+
+              case (remote, KMessage.FindNode(t, senderId, target)) =>
+                logger.debug("FindNode") *>
+                  s.write1(remote, FindNodeResponse(t, id, List.empty))
+
+              case (remote, KMessage.GetPeers(t, senderId, infohash)) =>
+                logger.debug("GetPeers") *>
+                  s.write1(
+                    remote,
+                    GetPeersResponse(t, id, Token.gen(), List.empty)
+                  )
+              case (
                   remote,
-                  GetPeersResponse(t, id, Token.gen(), List.empty)
-                )
-            case (
-                remote,
-                KMessage.AnnouncePeer(
-                  t,
-                  impliedPort,
-                  senderId,
-                  infoHash,
-                  port,
-                  token
-                )
-                ) =>
-              logger.debug("AnnouncePeer") *>
-                s.write1(remote, NodeIdResponse(t, id))
-            case _ =>
-              logger.debug("unsupported")
+                  KMessage.AnnouncePeer(
+                    t,
+                    impliedPort,
+                    senderId,
+                    infoHash,
+                    port,
+                    token
+                  )
+                  ) =>
+                logger.debug("AnnouncePeer") *>
+                  s.write1(remote, NodeIdResponse(t, id))
+              case _ =>
+                logger.debug("unsupported")
+            }
           }
-        }
+    }
   }
 }
