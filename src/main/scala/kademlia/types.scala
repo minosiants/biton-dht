@@ -1,13 +1,13 @@
 package kademlia
 
 import benc.{ BDecoder, BEncoder }
-import scodec.bits.{ BitVector, ByteVector }
+import cats.implicits._
+import cats.{ Eq, Order }
 import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
-import cats.{ Eq, Order }
-import cats.implicits._
 import kademlia.protocol.Token
 import scodec.Codec
+import scodec.bits.BitVector
 import scodec.codecs._
 
 object types {
@@ -79,6 +79,7 @@ object types {
   object Distance {
     implicit val orderingDistance: Ordering[Distance] =
       Ordering[BigInt].contramap(_.value)
+
   }
 
   final case class NodeInfo(token: Token, node: Node, distance: Distance)
