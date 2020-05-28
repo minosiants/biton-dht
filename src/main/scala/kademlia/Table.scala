@@ -19,6 +19,7 @@ trait Table extends Product with Serializable {
   def addNode(node: Node): Result[Table]
   def addNodes(nodes: List[Node]): Result[Table]
   def neighbors(nodeId: NodeId): List[Node]
+  def markNodeAsBad(node: Node): Result[Table]
 }
 
 object Table {
@@ -118,5 +119,13 @@ final case class KTable(
   override def neighbors(nodeId: NodeId): List[Node] = {
     assert(kbuckets.nonEmpty)
     kbuckets.filter(_.inRange(nodeId)).head.nodes.value
+  }
+
+  override def markNodeAsBad(node: Node): Result[Table] = {
+    for {
+      (kb, i) <- findBucketFor(node.nodeId)
+      kb1     <- kb.replaceFromCache(node)
+      updated = insertBuckets(i, NonEmptyVector.of(kb1))
+    } yield KTable(nodeId, updated)
   }
 }

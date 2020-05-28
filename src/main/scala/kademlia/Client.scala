@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.nio.channels.InterruptedByTimeoutException
 
 import cats.syntax.eq._
-import cats.effect.{ Concurrent, ContextShift, IO }
+import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import com.comcast.ip4s.Port
 import fs2.io.udp.SocketGroup
 import kademlia.protocol.{
@@ -25,8 +25,11 @@ import cats.Show
 import cats.syntax.apply._
 import cats.syntax.show._
 import cats.instances.list._
+
 import scala.concurrent.duration._
 import cats.syntax.either._
+
+import scala.util.control.NonFatal
 
 trait Client {
 
@@ -71,7 +74,8 @@ object Client {
       readTimeout: Option[FiniteDuration] = Some(2.seconds)
   )(
       implicit c: Concurrent[IO],
-      cs: ContextShift[IO]
+      cs: ContextShift[IO],
+      timer: Timer[IO]
   ) = {
     val logger = Slf4jLogger.getLogger[IO]
 
@@ -109,7 +113,12 @@ object Client {
           badTransactionId orElse pf orElse badResponse
         }
         .head
-        .handleErrorWith {
+        .attempts(Stream(1.second).repeatN(2))
+        .takeThrough(_.fold(NonFatal(_), _ => false))
+        .last
+        .map(_.get)
+        .rethrow
+      /*.handleErrorWith {
           case _: InterruptedByTimeoutException =>
             Stream.eval_(logger.error(s"Timeout")) ++ Stream.empty
           case e @ Error.KRPCError(_) =>
@@ -124,7 +133,7 @@ object Client {
             Stream.eval_(logger.error(e.getMessage)) ++
               Stream.eval_(logger.debug(s"message: $msg")) ++
               Stream.empty
-        }
+        }*/
     }
 
     new Client() {
