@@ -12,6 +12,7 @@ import scodec.bits.BitVector
 import org.scalacheck.cats.implicits._
 import cats.instances.list._
 import cats.syntax.traverse._
+import kademlia.protocol.Token
 
 import scala.concurrent.ExecutionContext
 
@@ -93,4 +94,6 @@ class KSuite extends ScalaCheckSuite {
     val ids = kb.nodes.value.map(v => BigInt(v.nodeId.value.toByteArray).toInt)
     Set.range(kb.from.value.toInt, kb.to.value.toInt) &~ ids.toSet
   }
+
+  val tokenGen: Gen[Token] = bitVectorGen(2 * 8).map(Token(_))
 }

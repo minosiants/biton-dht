@@ -19,7 +19,7 @@ class ServerSpec extends KSuite {
     Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          val s = Server.start(sg, serverNode.nodeId, serverNode.contact.port)
+          val s = Server(serverNode.nodeId, sg, serverNode.contact.port).start()
           val c =
             f(Client(clientNodeId, sg))
           Client.extractStrict(c.concurrently(s))

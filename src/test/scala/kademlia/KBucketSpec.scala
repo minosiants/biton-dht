@@ -1,10 +1,9 @@
 package kademlia
+import cats.instances.list._
 import cats.syntax.either._
-import cats.syntax.partialOrder._
 import kademlia.KBucket.Cache
 import kademlia.types.{ KSize, NodeId, Prefix }
 import org.scalacheck.Prop.forAll
-import cats.instances.list._
 
 class KBucketSpec extends KSuite {
 

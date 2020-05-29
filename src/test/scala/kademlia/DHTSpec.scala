@@ -1,23 +1,19 @@
 package kademlia
 
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
-import java.nio.file.{ Files, Path }
-
-import cats.effect._
-import cats.syntax.either._
-import cats.syntax.show._
-import fs2.io.udp.SocketGroup
-import fs2.Stream
-import boopickle.Default._
-import kademlia.types.{ NodeId, Prefix }
-import scodec.bits.BitVector
 import java.io.{
   FileInputStream,
   FileOutputStream,
   ObjectInputStream,
   ObjectOutputStream
 }
+import java.nio.file.Path
+
+import cats.effect._
+import cats.syntax.either._
+import cats.syntax.show._
+import com.comcast.ip4s.Port
+import fs2.io.udp.SocketGroup
+import kademlia.types.NodeId
 
 class DHTSpec extends KSuite with TableFunctions {
   test("bootstrap") {
@@ -25,7 +21,7 @@ class DHTSpec extends KSuite with TableFunctions {
     val bs = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          DHT.bootstrap(sg).table
+          DHT.bootstrap(sg, Port(6881).get).flatMap(_.table)
         }
       }
 

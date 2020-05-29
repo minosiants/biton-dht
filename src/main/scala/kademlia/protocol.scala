@@ -82,6 +82,8 @@ object protocol {
 
     implicit val codec: BCodec[Token] =
       BCodec.bitVectorBCodec.xmap(Token(_), _.value)
+
+    implicit val eqToken: Eq[Token] = Eq.instance((a, b) => a.value === b.value)
   }
 
   final case class Peer(ip: IpAddress, port: Port)

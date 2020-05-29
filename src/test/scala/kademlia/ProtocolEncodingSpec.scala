@@ -48,8 +48,6 @@ class ProtocolEncodingSpec extends KSuite {
 
   val infoHashGen: Gen[InfoHash] = bitVectorGen(idLength).map(InfoHash(_))
 
-  val tokenGen: Gen[Token] = bitVectorGen(2 * 8).map(Token(_))
-
   val peerGen: Gen[Peer] = for {
     ip   <- ipV4Gen
     port <- portGen
