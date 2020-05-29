@@ -2,23 +2,21 @@ package kademlia
 
 import java.time.Clock
 
-import cats.Apply
-import cats.effect.concurrent.Ref
+import cats.effect.concurrent.{ Deferred, Ref }
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
-import kademlia.protocol.KMessage.{
-  GetPeersNodesResponse,
-  GetPeersResponse,
-  ImpliedPort
-}
-import kademlia.protocol.{ InfoHash, Peer, Token }
-import kademlia.types.{ Contact, Distance, Node, NodeId, NodeInfo }
 import cats.implicits._
 import com.comcast.ip4s._
 import fs2.Stream
 import fs2.io.udp.SocketGroup
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import kademlia.protocol.KMessage.{
+  GetPeersNodesResponse,
+  GetPeersResponse,
+  ImpliedPort
+}
+import kademlia.protocol.{ InfoHash, Peer }
+import kademlia.types.{ Contact, Node, NodeId, NodeInfo }
 
-import Function._
 import scala.concurrent.duration._
 
 trait DHT {
@@ -48,9 +46,8 @@ object DHT {
     val client = Client(nodeId, sg)
     val server = Server(nodeId, sg, port)
     for {
-      table  <- IO.fromEither(Table.empty(nodeId))
-      ref    <- Ref.of(table)
-      cache  <- MemCache.empty[String, List[NodeInfo]](10.minutes)
+      ref    <- TableState.empty(nodeId)
+      cache  <- NodeInfoCache.create(10.minutes)
       _nodes <- nodes
       dht    <- DHTDef(nodeId, ref, cache, client, server).bootstrap(_nodes)
     } yield dht
@@ -60,8 +57,8 @@ object DHT {
 
 final case class DHTDef(
     nodeId: NodeId,
-    table: Ref[IO, Table],
-    cache: MemCache[String, List[NodeInfo]],
+    table: TableState,
+    cache: NodeInfoCache,
     client: Client,
     server: Server
 )(
@@ -73,24 +70,20 @@ final case class DHTDef(
 
   import DHT.logger
 
-  override def lookup(infoHash: InfoHash): IO[List[Peer]] = {
-    for {
-      (peers, _) <- _lookup(infoHash)
-    } yield peers
+  override def lookup(infoHash: InfoHash): IO[List[Peer]] =
+    _lookup(infoHash).map { case (peers, _) => peers }
 
-  }
   def _lookup(infoHash: InfoHash): IO[(List[Peer], List[NodeInfo])] = {
     for {
-      t <- table.get
-      nodes = t.neighbors(NodeId(infoHash.value))
+      nodes          <- table.neighbors(infoHash)
       (peers, infos) <- findPeers(nodes, infoHash)
-      _              <- saveNodeInfo(infoHash, infos)
+      _              <- cache.put(infoHash, infos)
     } yield (peers, infos)
 
   }
   override def announce(infoHash: InfoHash, port: Port): IO[Unit] = {
     for {
-      nodesInfo <- cache.get(infoHash.value.toHex)
+      nodesInfo <- cache.get(infoHash)
       nodes     <- nodesInfo.fold(_lookup(infoHash).map(_._2))(IO(_))
       _ <- Stream
         .emits(nodes)
@@ -108,12 +101,12 @@ final case class DHTDef(
                 Stream.eval_(
                   logger.debug(s"Announce peer error. node: $n ${e.show}")
                 ) ++
-                  markNodeAsBad(n.node)
+                  table.markNodeAsBad(n.node)
               case e: Throwable =>
                 Stream.eval_(
                   logger.debug(s"Announce peer error. node: $n ${e.getMessage}")
                 ) ++
-                  markNodeAsBad(n.node)
+                  table.markNodeAsBad(n.node)
             }
         }
         .parJoin(8)
@@ -131,30 +124,15 @@ final case class DHTDef(
       _nodes <- findNodesFrom(nodes)
       t      <- table.get
       t2     <- IO.fromEither(t.addNodes(_nodes))
-      newRef <- Ref.of(t2)
+      newRef <- TableState.create(t2)
     } yield DHTDef(nodeId, newRef, cache, client, server)
   }
-
-  def updateTable(f: Table => Result[Table]): IO[Table] =
-    for {
-      t  <- table.get
-      nt <- IO.fromEither(f(t))
-      _  <- table.set(nt)
-    } yield nt
-
-  def addNodes(n: List[Node]): IO[Table] = updateTable(_.addNodes(n))
-  def markNodeAsBad(n: Node): Stream[IO, Nothing] =
-    Stream.eval_(updateTable(_.markNodeAsBad(n)))
 
   final case class NodeResponse(
       info: NodeInfo,
       nodes: List[Node],
       peers: List[Peer]
   )
-
-  def saveNodeInfo(infoHash: InfoHash, info: List[NodeInfo]): IO[Unit] = {
-    cache.put(infoHash.value.toHex, info)
-  }
 
   def findPeers(
       nodes: List[Node],
@@ -196,12 +174,12 @@ final case class DHTDef(
                   Stream.eval_(
                     logger.debug(s"Get peers error. node: $n ${e.show}")
                   ) ++
-                    markNodeAsBad(n)
+                    table.markNodeAsBad(n)
                 case e: Throwable =>
                   Stream.eval_(
                     logger.debug(s"Get peers error. node: $n ${e.getMessage}")
                   ) ++
-                    markNodeAsBad(n)
+                    table.markNodeAsBad(n)
               }
           }
           .parJoin(8)
@@ -212,7 +190,7 @@ final case class DHTDef(
         newResponse <- find
         newPeers = newResponse.flatMap(_.peers.toSet.toList)
         newNodes = newResponse.map(_.info.node)
-        _ <- addNodes(newNodes.toSet.toList)
+        _ <- table.addNodes(newNodes.toSet.toList)
         sorted = newResponse.sortBy(_.info.distance).take(8)
         (p, _) <- previous match {
           case Nil => go(sorted.flatMap(_.nodes), sorted, newPeers ++ peers)
@@ -247,12 +225,12 @@ final case class DHTDef(
                 Stream.eval_(
                   logger.debug(s"Find node error. node: $n ${e.show}")
                 ) ++
-                  markNodeAsBad(n)
+                  table.markNodeAsBad(n)
               case e: Throwable =>
                 Stream.eval_(
                   logger.debug(s"Find node error. node: $n ${e.getMessage}")
                 ) ++
-                  markNodeAsBad(n)
+                  table.markNodeAsBad(n)
             }
 
         }
@@ -306,4 +284,58 @@ object BootstrapNodes {
 
   def apply(): IO[List[Node]] =
     BootstrapNodes(transmissionbt, bittorrent, utorrent, silotis).nodes
+}
+
+trait TableState {
+  def update(f: Table => Result[Table]): IO[Table]
+  def get: IO[Table]
+  def addNodes(n: List[Node]): IO[Table] = update(_.addNodes(n))
+  def markNodeAsBad(n: Node): Stream[IO, Nothing] =
+    Stream.eval_(update(_.markNodeAsBad(n)))
+  def neighbors(infoHash: InfoHash): IO[List[Node]] =
+    get.map(_.neighbors(NodeId(infoHash.value)))
+}
+
+object TableState {
+  def empty(
+      nodeId: NodeId
+  )(implicit c: Concurrent[IO], clock: Clock): IO[TableState] =
+    IO.fromEither(Table.empty(nodeId)) >>= create
+
+  def create(table: Table)(implicit c: Concurrent[IO]): IO[TableState] = {
+    Ref[IO].of(table).map { state =>
+      new TableState {
+        override def update(f: Table => Result[Table]): IO[Table] =
+          state.modify { t =>
+            f(t) match {
+              case Left(e)  => t -> IO.raiseError(e)
+              case Right(v) => v -> IO.pure(v)
+            }
+          }.flatten
+
+        override def get: IO[Table] = state.get
+      }
+    }
+  }
+}
+
+trait NodeInfoCache {
+  def put(infoHash: InfoHash, info: List[NodeInfo]): IO[Unit]
+  def get(infoHash: InfoHash): IO[Option[List[NodeInfo]]]
+}
+
+object NodeInfoCache {
+  def create(
+      expires: FiniteDuration
+  )(implicit timer: Timer[IO], clock: Clock): IO[NodeInfoCache] =
+    MemCache.empty[String, List[NodeInfo]](expires).map { cache =>
+      new NodeInfoCache {
+        override def put(infoHash: InfoHash, info: List[NodeInfo]): IO[Unit] =
+          cache.put(infoHash.value.toHex, info)
+
+        override def get(infoHash: InfoHash): IO[Option[List[NodeInfo]]] =
+          cache.get(infoHash.value.toHex)
+      }
+
+    }
 }
