@@ -79,10 +79,14 @@ object types {
   object Distance {
     implicit val orderingDistance: Ordering[Distance] =
       Ordering[BigInt].contramap(_.value)
-
+    implicit val eqDistance: Eq[Distance] = Eq.fromUniversalEquals
   }
 
   final case class NodeInfo(token: Token, node: Node, distance: Distance)
+
+  object NodeInfo {
+    implicit val eqNodeInfo: Eq[NodeInfo] = Eq.fromUniversalEquals
+  }
 
   @newtype final case class NodeId(value: BitVector)
 
