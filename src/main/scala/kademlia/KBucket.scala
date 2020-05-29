@@ -97,8 +97,8 @@ sealed abstract class KBucket extends Product with Serializable {
       .map2(find(node.nodeId), cache.headOption) { (n, cn) =>
         for {
           kb     <- remove(n)
-          kb2    <- removeFromCache(cn)
-          result <- add(cn)
+          kb2    <- kb.removeFromCache(cn)
+          result <- kb2.add(cn)
         } yield result
       }
       .getOrElse(this.asRight)

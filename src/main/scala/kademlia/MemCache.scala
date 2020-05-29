@@ -27,9 +27,9 @@ object MemCache {
   def empty[A, B](
       expires: FiniteDuration
   )(implicit timer: Timer[IO], clock: Clock): IO[MemCache[A, B]] =
-    for {
-      ref <- Ref.of[IO, Map[A, Timestamped[B]]](Map.empty[A, Timestamped[B]])
-    } yield MemCacheMap(ref, expires)
+    Ref[IO].of(Map.empty[A, Timestamped[B]]).map { ref =>
+      MemCacheMap(ref, expires)
+    }
 
   final case class MemCacheMap[A, B](
       ref: Ref[IO, Map[A, Timestamped[B]]],
