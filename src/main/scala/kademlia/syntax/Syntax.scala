@@ -5,3 +5,4 @@ trait Syntax
     with NodeIdSyntax
     with PrefixSyntax
     with ByteSyntax
+    with ThrowableSyntax

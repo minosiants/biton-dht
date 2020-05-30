@@ -3,7 +3,6 @@ package kademlia
 import java.net.InetSocketAddress
 import java.nio.channels.InterruptedByTimeoutException
 
-import cats.syntax.eq._
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import com.comcast.ip4s.Port
 import fs2.io.udp.SocketGroup
@@ -20,48 +19,28 @@ import kademlia.protocol.{
 import kademlia.protocol.KMessage._
 import kademlia.types._
 import fs2._
+import cats.implicits._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import cats.Show
-import cats.syntax.apply._
-import cats.syntax.show._
-import cats.instances.list._
 
 import scala.concurrent.duration._
-import cats.syntax.either._
 
 import scala.util.control.NonFatal
 
 trait Client {
 
   def ping(node: Node): Stream[IO, NodeIdResponse]
-  def pingF(node: Node): IO[Option[NodeIdResponse]] = Client.extract(ping(node))
-  def findNode(contact: Contact, target: NodeId): Stream[IO, FindNodeResponse]
-  def findNodeF(
-      contact: Contact,
-      target: NodeId
-  ): IO[Option[FindNodeResponse]] =
-    Client.extract(findNode(contact, target))
+  def findNode(contact: Contact, target: NodeId): Stream[IO, List[Node]]
   def getPeers(
-      contact: Contact,
+      node: Node,
       infoHash: InfoHash
-  ): Stream[IO, Either[GetPeersNodesResponse, GetPeersResponse]]
+  ): Stream[IO, NodeResponse]
 
   def announcePeer(
-      contact: Contact,
-      impliedPort: ImpliedPort,
+      n: NodeInfo,
       infoHash: InfoHash,
-      port: Port,
-      token: Token
+      port: Port
   ): Stream[IO, NodeIdResponse]
-
-  def announcePeerF(
-      contact: Contact,
-      impliedPort: ImpliedPort,
-      infoHash: InfoHash,
-      port: Port,
-      token: Token
-  ): IO[Option[NodeIdResponse]] =
-    Client.extract(announcePeer(contact, impliedPort, infoHash, port, token))
 
 }
 
@@ -75,6 +54,7 @@ object Client {
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
+      rt: RaiseThrowable[IO],
       timer: Timer[IO]
   ) = {
     val logger = Slf4jLogger.getLogger[IO]
@@ -137,6 +117,7 @@ object Client {
     }
 
     new Client() {
+
       override def ping(node: Node): Stream[IO, NodeIdResponse] = {
         get[NodeIdResponse](node.contact, Ping(Transaction.gen(), node.nodeId)) {
           case (_, r @ NodeIdResponse(_, _)) =>
@@ -148,65 +129,92 @@ object Client {
       override def findNode(
           contact: Contact,
           target: NodeId
-      ): Stream[IO, FindNodeResponse] = {
+      ): Stream[IO, List[Node]] = {
         val fn = FindNode(Transaction.gen(), id, target)
         get[FindNodeResponse](contact, fn) {
           case (_, r @ FindNodeResponse(_, _, _)) =>
             IO(r)
-        }
+        }.map(_.nodes)
+          .attempt
+          .evalTap {
+            case Left(error) =>
+              logger.debug(
+                s"Find node error. nodeId: $target contact:$contact ${error.string}"
+              )
+            case Right(_) => IO(())
+          }
+          .rethrow
       }
 
       override def getPeers(
-          contact: Contact,
+          node: Node,
           infoHash: InfoHash
-      ): Stream[IO, Either[GetPeersNodesResponse, GetPeersResponse]] = {
+      ): Stream[IO, NodeResponse] = {
         val req = GetPeers(Transaction.gen(), id, infoHash)
-        get[KMessage](contact, req) {
+        get[KMessage](node.contact, req) {
           case (_, r @ GetPeersResponse(_, _, _, _)) =>
             IO(r)
           case (_, r @ GetPeersNodesResponse(_, _, _, _)) =>
             IO(r)
         }.flatMap {
-          case r @ GetPeersNodesResponse(_, _, _, _) =>
-            Stream.emit(r.asLeft[GetPeersResponse])
-          case r @ GetPeersResponse(_, _, _, _) =>
-            Stream.emit(r.asRight[GetPeersNodesResponse])
-          case v =>
-            Stream.raiseError(Error.ClientError(s"Should not get $v here"))
-        }
+            case GetPeersNodesResponse(_, _, token, nodes) =>
+              Stream.emit(
+                NodeResponse(
+                  NodeInfo(token, node, id.distance(node.nodeId)),
+                  nodes,
+                  Nil
+                )
+              )
+            case GetPeersResponse(_, _, token, peers) =>
+              Stream.emit(
+                NodeResponse(
+                  NodeInfo(token, node, id.distance(node.nodeId)),
+                  Nil,
+                  peers
+                )
+              )
+            case v =>
+              Stream.raiseError(Error.ClientError(s"Should not get $v here"))
+          }
+          .attempt
+          .evalTap {
+            case Left(error) =>
+              logger.debug(s"Get peers error. node: $node ${error.string}")
+            case Right(_) => IO(())
+          }
+          .rethrow
+
       }
 
       override def announcePeer(
-          contact: Contact,
-          impliedPort: ImpliedPort,
+          n: NodeInfo,
           infoHash: InfoHash,
-          port: Port,
-          token: Token
+          port: Port
       ): Stream[IO, NodeIdResponse] = {
         val req = AnnouncePeer(
           Transaction.gen(),
-          impliedPort,
+          ImpliedPort(true),
           id,
           infoHash,
           port,
-          token
+          n.token
         )
-        get[NodeIdResponse](contact, req) {
+        get[NodeIdResponse](n.node.contact, req) {
           case (_, r @ NodeIdResponse(_, _)) =>
             IO(r)
-        }
+        }.attempt.evalTap {
+          case Left(error) =>
+            logger.debug(s"Announce peer error. node: $n ${error.string}")
+          case Right(_) => IO(())
+        }.rethrow
       }
-
     }
   }
-  def extract[A](s: Stream[IO, A]): IO[Option[A]] =
-    s.compile.toList.map(_.headOption)
-
-  def extractStrict[A](s: Stream[IO, A]): IO[A] =
-    s.compile.toList.flatMap(
-      _.headOption.fold(
-        IO.raiseError[A](Error.ServerError("Not found"))
-      )(v => IO(v))
-    )
 
 }
+
+final case class NodeResponse(
+    info: NodeInfo,
+    nodes: List[Node],
+    peers: List[Peer]
+)

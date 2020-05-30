@@ -14,7 +14,7 @@ import kademlia.protocol.KMessage.{
   GetPeersResponse,
   ImpliedPort
 }
-import kademlia.protocol.{ InfoHash, Peer }
+import kademlia.protocol.{ InfoHash, KMessage, Peer }
 import kademlia.types.{ Contact, Node, NodeId, NodeInfo }
 
 import scala.concurrent.duration._
@@ -47,10 +47,10 @@ object DHT {
     val client = Client(nodeId, sg)
     val server = Server(nodeId, sg, port)
     for {
-      ref    <- TableState.empty(nodeId)
-      cache  <- NodeInfoCache.create(10.minutes)
-      _nodes <- nodes
-      dht    <- DHTDef(nodeId, ref, cache, client, server).bootstrap(_nodes)
+      tableState <- TableState.empty(nodeId)
+      cache      <- NodeInfoCache.create(10.minutes)
+      _nodes     <- nodes
+      dht        <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
     } yield dht
   }
 
@@ -84,38 +84,25 @@ final case class DHTDef(
     } yield (peers, infos)
 
   }
+
   override def announce(infoHash: InfoHash, port: Port): IO[Unit] = {
-    for {
-      nodesInfo <- cache.get(infoHash)
-      nodes     <- nodesInfo.fold(_lookup(infoHash).map(_._2))(IO(_))
-      _ <- Stream
-        .emits(nodes)
-        .map { n =>
+    Stream
+      .eval(cache.get(infoHash))
+      .evalMap {
+        case None        => _lookup(infoHash).map(_._2)
+        case Some(value) => IO(value)
+      }
+      .flatMap(Stream.emits(_))
+      .map(
+        n =>
           client
-            .announcePeer(
-              n.node.contact,
-              ImpliedPort(true),
-              infoHash,
-              port,
-              n.token
-            )
-            .handleErrorWith {
-              case e: Error =>
-                Stream.eval_(
-                  logger.debug(s"Announce peer error. node: $n ${e.show}")
-                ) ++
-                  tableState.markNodeAsBad(n.node)
-              case e: Throwable =>
-                Stream.eval_(
-                  logger.debug(s"Announce peer error. node: $n ${e.getMessage}")
-                ) ++
-                  tableState.markNodeAsBad(n.node)
-            }
-        }
-        .parJoin(8)
-        .compile
-        .toList
-    } yield ()
+            .announcePeer(n, infoHash, port)
+            .handleErrorWith(_ => tableState.markNodeAsBad(n.node))
+      )
+      .parJoin(8)
+      .compile
+      .drain
+
   }
 
   override def start(): Stream[IO, Unit] = {
@@ -124,17 +111,11 @@ final case class DHTDef(
 
   def bootstrap(nodes: List[Node]): IO[DHTDef] = {
     for {
-      _nodes   <- findNodesFrom(nodes)
+      _nodes   <- findNodesFrom(nodes, 3)
       t2       <- tableState.addNodes(_nodes)
       newState <- TableState.create(t2)
     } yield DHTDef(nodeId, newState, cache, client, server)
   }
-
-  final case class NodeResponse(
-      info: NodeInfo,
-      nodes: List[Node],
-      peers: List[Peer]
-  )
 
   def findPeers(
       nodes: List[Node],
@@ -152,37 +133,8 @@ final case class DHTDef(
           .emits(_nodes)
           .map { n =>
             client
-              .getPeers(n.contact, infoHash)
-              .evalMap {
-                case Left(GetPeersNodesResponse(_, _, token, nn)) =>
-                  IO(
-                    NodeResponse(
-                      NodeInfo(token, n, nodeId.distance(n.nodeId)),
-                      nn,
-                      Nil
-                    )
-                  )
-                case Right(GetPeersResponse(_, _, token, values)) =>
-                  IO(
-                    NodeResponse(
-                      NodeInfo(token, n, nodeId.distance(n.nodeId)),
-                      Nil,
-                      values
-                    )
-                  )
-              }
-              .handleErrorWith {
-                case e: Error =>
-                  Stream.eval_(
-                    logger.debug(s"Get peers error. node: $n ${e.show}")
-                  ) ++
-                    tableState.markNodeAsBad(n)
-                case e: Throwable =>
-                  Stream.eval_(
-                    logger.debug(s"Get peers error. node: $n ${e.getMessage}")
-                  ) ++
-                    tableState.markNodeAsBad(n)
-              }
+              .getPeers(n, infoHash)
+              .handleErrorWith(_ => tableState.markNodeAsBad(n))
           }
           .parJoin(8)
           .compile
@@ -213,7 +165,7 @@ final case class DHTDef(
     go(nodes, Nil, Nil)
   }
 
-  def findNodesFrom(nodes: List[Node], count: Int = 3): IO[List[Node]] = {
+  def findNodesFrom(nodes: List[Node], count: Int): IO[List[Node]] = {
     def find =
       Stream
         .emits(nodes)
@@ -221,20 +173,7 @@ final case class DHTDef(
         .map { n =>
           client
             .findNode(n.contact, nodeId)
-            .map(_.nodes)
-            .handleErrorWith {
-              case e: Error =>
-                Stream.eval_(
-                  logger.debug(s"Find node error. node: $n ${e.show}")
-                ) ++
-                  tableState.markNodeAsBad(n)
-              case e: Throwable =>
-                Stream.eval_(
-                  logger.debug(s"Find node error. node: $n ${e.getMessage}")
-                ) ++
-                  tableState.markNodeAsBad(n)
-            }
-
+            .handleErrorWith(_ => tableState.markNodeAsBad(n))
         }
         .parJoin(8)
         .flatMap(Stream.emits(_))
