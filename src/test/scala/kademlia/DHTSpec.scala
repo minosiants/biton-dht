@@ -13,7 +13,9 @@ import cats.syntax.either._
 import cats.syntax.show._
 import com.comcast.ip4s.Port
 import fs2.io.udp.SocketGroup
+import kademlia.protocol.InfoHash
 import kademlia.types.NodeId
+import scodec.bits._
 
 class DHTSpec extends KSuite with TableFunctions {
   test("bootstrap") {
@@ -66,6 +68,21 @@ class DHTSpec extends KSuite with TableFunctions {
         _.kbuckets.head.nodes.value.map(_.nodeId.value.toBin).mkString("\n")
       )
     )
+    true
+  }
+
+  test("lookup".only) {
+    val bits     = hex"fcc54fe84f4936cb036077a9307f859bfa7f6606"
+    val infoHash = InfoHash(bits.bits)
+    val bs = Blocker[IO]
+      .use { blocker =>
+        SocketGroup[IO](blocker).use { sg =>
+          DHT.bootstrap(sg, Port(6881).get).flatMap(_.lookup(infoHash))
+        }
+      }
+
+    val result = bs.unsafeRunSync()
+    println(result)
     true
   }
 
