@@ -98,22 +98,6 @@ object Client {
         .last
         .map(_.get)
         .rethrow
-      /*.handleErrorWith {
-          case _: InterruptedByTimeoutException =>
-            Stream.eval_(logger.error(s"Timeout")) ++ Stream.empty
-          case e @ Error.KRPCError(_) =>
-            Stream.eval_(logger.error(Show[Error].show(e))) ++
-              Stream.eval_(logger.debug(s" message: $msg")) ++
-              Stream.empty
-          case e @ Error.ClientError(_) =>
-            Stream.eval_(logger.error(Show[Error].show(e))) ++
-              Stream.eval_(logger.debug(s" message: $msg")) ++
-              Stream.empty
-          case e: Throwable =>
-            Stream.eval_(logger.error(e.getMessage)) ++
-              Stream.eval_(logger.debug(s"message: $msg")) ++
-              Stream.empty
-        }*/
     }
 
     new Client() {
