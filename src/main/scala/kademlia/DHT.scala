@@ -33,6 +33,25 @@ trait DHT {
 object DHT {
   val logger = Slf4jLogger.getLogger[IO]
 
+  def fromTable(
+      sg: SocketGroup,
+      port: Port,
+      table: Table
+  )(
+      implicit c: Concurrent[IO],
+      cs: ContextShift[IO],
+      time: Timer[IO],
+      clock: Clock
+  ): IO[DHT] = {
+
+    val client = Client(table.nodeId, sg)
+    val server = Server(table.nodeId, sg, port)
+    for {
+      tableState <- TableState.create(table)
+      cache      <- NodeInfoCache.create(10.minutes)
+    } yield DHTDef(table.nodeId, tableState, cache, client, server)
+  }
+
   def bootstrap(
       sg: SocketGroup,
       port: Port,
