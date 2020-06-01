@@ -46,8 +46,6 @@ class ProtocolEncodingSpec extends KSuite {
   val rpcErrorCodeGen: Gen[RpcErrorCode] =
     Gen.oneOf(201, 202, 203, 204).map(RpcErrorCode.find(_).get)
 
-  val infoHashGen: Gen[InfoHash] = bitVectorGen(idLength).map(InfoHash(_))
-
   val peerGen: Gen[Peer] = for {
     ip   <- ipV4Gen
     port <- portGen

@@ -19,7 +19,10 @@ lazy val root = (project in file("."))
     organization := "com.minosiants",
     name := "kademlia",
     scalaVersion := "2.13.1",
-    scalacOptions ++= Seq("-Ymacro-annotations", "-Ywarn-unused", "-Yrangepos"),
+    scalacOptions ++= Seq(
+      "-Ymacro-annotations",
+      //"-Ywarn-unused",
+      "-Yrangepos"),
     libraryDependencies ++= Seq(
       "org.typelevel"     %% "cats-core"        % catsVersion,
       "org.typelevel"     %% "cats-effect"      % catsEffectVersion,

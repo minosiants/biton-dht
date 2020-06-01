@@ -2,20 +2,15 @@ package kademlia
 
 import java.time.Clock
 
-import cats.effect.concurrent.{ Deferred, Ref }
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import cats.effect.concurrent.Ref
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import cats.implicits._
 import com.comcast.ip4s._
 import fs2.Stream
 import fs2.io.udp.SocketGroup
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import kademlia.protocol.KMessage.{
-  GetPeersNodesResponse,
-  GetPeersResponse,
-  ImpliedPort
-}
-import kademlia.protocol.{ InfoHash, KMessage, Peer }
-import kademlia.types.{ Contact, Node, NodeId, NodeInfo }
+import kademlia.protocol.{ InfoHash, Peer }
+import kademlia.types.{ Contact, Distance, Node, NodeId, NodeInfo }
 
 import scala.concurrent.duration._
 
@@ -87,9 +82,7 @@ final case class DHTDef(
     timer: Timer[IO],
     clock: Clock
 ) extends DHT {
-
   import DHT.logger
-
   override def table: IO[Table] = tableState.get
 
   override def lookup(infoHash: InfoHash): IO[List[Peer]] =
@@ -142,46 +135,56 @@ final case class DHTDef(
   ): IO[(List[Peer], List[NodeInfo])] = {
 
     def go(
-        _nodes: List[Node],
-        previous: List[NodeResponse],
+        tt: TraversalTable,
         peers: List[Peer]
     ): IO[(List[Peer], List[NodeInfo])] = {
 
-      def find: IO[List[NodeResponse]] =
+      def find: IO[(List[Node], List[NodeResponse])] =
         Stream
-          .emits(_nodes)
+          .emits(tt.top(3))
           .map { n =>
             client
               .getPeers(n, infoHash)
-              .handleErrorWith(_ => tableState.markNodeAsBad(n))
+              .attempt
+              .map {
+                case Left(_)  => (List(n), Nil)
+                case Right(v) => (Nil, List(v))
+              }
+
           }
-          .parJoin(8)
+          .parJoin(3)
           .compile
           .toList
+          .map {
+            _.foldLeft((List.empty[Node], List.empty[NodeResponse])) {
+              case ((b1, b2), (v1, v2)) =>
+                (v1 ++ b1, v2 ++ b2)
+            }
+          }
 
       for {
-        newResponse <- find
-        newPeers = newResponse.flatMap(_.peers.toSet.toList)
-        newNodes = newResponse.map(_.info.node)
-        _ <- tableState.addNodes(newNodes.toSet.toList)
-        sorted = newResponse.sortBy(_.info.distance).take(8)
-        (p, _) <- previous match {
-          case Nil => go(sorted.flatMap(_.nodes), sorted, newPeers ++ peers)
-          case xs =>
-            xs.zip(sorted)
-              .map { case (a, b) => a.info.distance > b.info.distance }
-              .find(_ == true)
-              .fold(IO((newPeers ++ peers) -> sorted.map(_.info)))(
-                _ => go(sorted.flatMap(_.nodes), sorted, newPeers ++ peers)
-              )
+        (stale, responded) <- find
+        _                  <- logger.error(s"tt $tt")
+        _                  <- logger.error(s"stale $stale")
+        _                  <- logger.error(s"responded $responded")
+        _                  <- tableState.markNodesAsBad(stale)
+        res <- tt
+          .markNodesAsStale(stale)
+          .markNodesAsResponded(responded.map(_.info)) match {
+          case t @ TraversalTable.Completed(_, _) =>
+            IO(
+              (peers ++ responded.flatMap(_.peers), t.lastResponded.map(_.info))
+            )
+          case t @ TraversalTable.InProgress(_, _) =>
+            go(
+              t.addNodes(responded.flatMap(_.nodes)),
+              peers ++ responded.flatMap(_.peers)
+            )
         }
 
-        infos = sorted.map(_.info) ++ previous.map(_.info)
-      } yield (p, infos)
-
+      } yield res
     }
-
-    go(nodes, Nil, Nil)
+    go(TraversalTable.create(infoHash, nodes), Nil)
   }
 
   def findNodesFrom(nodes: List[Node], count: Int): IO[List[Node]] = {
@@ -252,6 +255,8 @@ trait TableState {
   def addNodes(n: List[Node]): IO[Table] = update(_.addNodes(n))
   def markNodeAsBad(n: Node): Stream[IO, Nothing] =
     Stream.eval_(update(_.markNodeAsBad(n)))
+  def markNodesAsBad(n: List[Node]): IO[Table] =
+    update(_.markNodesAsBad(n))
   def neighbors(infoHash: InfoHash): IO[List[Node]] =
     get.map(_.neighbors(NodeId(infoHash.value)))
 }

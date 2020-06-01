@@ -82,7 +82,7 @@ object types {
     implicit val eqDistance: Eq[Distance] = Eq.fromUniversalEquals
   }
 
-  final case class NodeInfo(token: Token, node: Node, distance: Distance)
+  final case class NodeInfo(token: Token, node: Node)
 
   object NodeInfo {
     implicit val eqNodeInfo: Eq[NodeInfo] = Eq.fromUniversalEquals
