@@ -1,30 +1,19 @@
 package kademlia
 
 import java.net.InetSocketAddress
-import java.nio.channels.InterruptedByTimeoutException
 
+import cats.Show
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
+import cats.implicits._
 import com.comcast.ip4s.Port
 import fs2.io.udp.SocketGroup
-import kademlia.protocol.{
-  InfoHash,
-  KMessage,
-  KMessageSocket,
-  KPacket,
-  Peer,
-  RpcError,
-  Token,
-  Transaction
-}
+import fs2.{ RaiseThrowable, Stream }
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import kademlia.protocol.KMessage._
+import kademlia.protocol._
 import kademlia.types._
-import fs2._
-import cats.implicits._
-import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import cats.Show
 
 import scala.concurrent.duration._
-
 import scala.util.control.NonFatal
 
 trait Client {
@@ -57,7 +46,6 @@ object Client {
       rt: RaiseThrowable[IO],
       timer: Timer[IO]
   ) = {
-    val logger = Slf4jLogger.getLogger[IO]
 
     def remote(contact: Contact) =
       new InetSocketAddress(contact.ip.toInetAddress, contact.port.value)
@@ -144,7 +132,7 @@ object Client {
             case GetPeersNodesResponse(_, _, token, nodes) =>
               Stream.emit(
                 NodeResponse(
-                  NodeInfo(token, node, id.distance(node.nodeId)),
+                  NodeInfo(token, node),
                   nodes,
                   Nil
                 )
@@ -152,7 +140,7 @@ object Client {
             case GetPeersResponse(_, _, token, peers) =>
               Stream.emit(
                 NodeResponse(
-                  NodeInfo(token, node, id.distance(node.nodeId)),
+                  NodeInfo(token, node),
                   Nil,
                   peers
                 )

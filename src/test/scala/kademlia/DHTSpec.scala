@@ -13,11 +13,13 @@ import cats.syntax.either._
 import cats.syntax.show._
 import com.comcast.ip4s.Port
 import fs2.io.udp.SocketGroup
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import kademlia.protocol.InfoHash
 import kademlia.types.NodeId
 import scodec.bits._
 
 class DHTSpec extends KSuite with TableFunctions {
+
   test("bootstrap") {
 
     val bs = Blocker[IO]
@@ -72,12 +74,17 @@ class DHTSpec extends KSuite with TableFunctions {
   }
 
   test("lookup".only) {
-    val bits     = hex"fcc54fe84f4936cb036077a9307f859bfa7f6606"
+    val bits     = hex"311aeba8ecb3f5b9ba8935bf326f049e63cc5967"
     val infoHash = InfoHash(bits.bits)
     val bs = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          DHT.bootstrap(sg, Port(6881).get).flatMap(_.lookup(infoHash))
+          for {
+            table <- loadTable("fffc21a3f289db8057396725b6cd53d4c0759991.kad")
+            res <- DHT
+              .fromTable(sg, Port(6881).get, table)
+              .flatMap(_.lookup(infoHash))
+          } yield res
         }
       }
 
@@ -86,7 +93,7 @@ class DHTSpec extends KSuite with TableFunctions {
     true
   }
 
-  test("load".ignore) {
+  def loadTable(name: String): IO[Table] = {
     def objectInputStream(path: Path): Resource[IO, ObjectInputStream] = {
       Resource.make {
         IO {
@@ -99,13 +106,18 @@ class DHTSpec extends KSuite with TableFunctions {
         }
       }
     }
-    val tableRes = objectInputStream(
-      Path.of("e1d4601dcde6f662bc6528a2ea54f8463fbe0951.kad")
+    objectInputStream(
+      Path.of(name)
     ).use { o =>
       IO(o.readObject().asInstanceOf[KTable])
     }
+
+  }
+
+  test("load".ignore) {
+
     val res = (for {
-      table <- tableRes
+      table <- loadTable("")
       _ = println(table)
     } yield table).attempt.unsafeRunSync().toOption.get
     println(res.nodeId.value.toBin)
@@ -117,4 +129,8 @@ class DHTSpec extends KSuite with TableFunctions {
 
   }
 
+}
+
+object DHTSpec {
+  val logger = Slf4jLogger.getLogger[IO]
 }

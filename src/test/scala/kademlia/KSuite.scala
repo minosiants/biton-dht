@@ -12,7 +12,7 @@ import scodec.bits.BitVector
 import org.scalacheck.cats.implicits._
 import cats.instances.list._
 import cats.syntax.traverse._
-import kademlia.protocol.Token
+import kademlia.protocol.{ InfoHash, Token }
 
 import scala.concurrent.ExecutionContext
 
@@ -64,7 +64,7 @@ class KSuite extends ScalaCheckSuite {
     for {
       list <- Gen
         .infiniteStream(nodeIdGen)
-        .map(_.take(size * 30).toSet.take(size).toList)
+        .map(_.take(size * 30).distinct.take(size).toList)
         .retryUntil(_.size == size)
       res <- list.traverse(v => contactGen.map(Node(v, _)))
     } yield res
@@ -96,4 +96,7 @@ class KSuite extends ScalaCheckSuite {
   }
 
   val tokenGen: Gen[Token] = bitVectorGen(2 * 8).map(Token(_))
+
+  val infoHashGen: Gen[InfoHash] =
+    Gen.negNum[Long].map(BitVector.fromLong(_)).map(InfoHash(_))
 }

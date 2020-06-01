@@ -6,6 +6,6 @@
         </encoder>
     </appender>
     <root level="DEBUG">
-        <appender-tableState tableState="STDOUT" />
+        <appender-ref ref="STDOUT" />
     </root>
 </configuration>
