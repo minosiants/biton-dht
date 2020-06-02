@@ -18,13 +18,16 @@ import scodec.{ Attempt, Codec, DecodeResult, Err }
 import scodec.codecs._
 import cats.syntax.flatMap._
 import cats.syntax.apply._
-import fs2.Stream
+import fs2.{ Chunk, Stream }
 import fs2.concurrent.Queue
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
+import fs2.Chunk.Bytes
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 import scala.concurrent.duration._
+import scodec.bits._
+
 object protocol {
 
   final case class RpcErrorCode(code: Int, msg: String)
@@ -256,49 +259,28 @@ object protocol {
         Eq.fromUniversalEquals
     }
 
-    final case class GetPeersNodesResponse(
+    final case class NodesWithPeersResponse(
         t: Transaction,
         id: NodeId,
         token: Token,
-        nodes: List[Node]
+        nodes: Option[List[Node]],
+        values: Option[List[Peer]]
     ) extends KMessage
 
-    object GetPeersNodesResponse {
+    object NodesWithPeersResponse {
 
-      implicit val bencoder: BEncoder[GetPeersNodesResponse] =
-        BCodec[GetPeersNodesResponse]
+      implicit val bencoder: BEncoder[NodesWithPeersResponse] =
+        BCodec[NodesWithPeersResponse]
 
-      implicit val bdecoder: BDecoder[GetPeersNodesResponse] = for {
+      implicit val bdecoder: BDecoder[NodesWithPeersResponse] = for {
         t     <- BDecoder.at[Transaction]("t")
         id    <- getRField[NodeId]("id")
         token <- getRField[Token]("token")
-        nodes <- getRField[List[Node]]("nodes")
-      } yield GetPeersNodesResponse(t, id, token, nodes)
+        nodes <- getRField[Option[List[Node]]]("nodes")
+        peers <- getRField[Option[List[Peer]]]("values")
+      } yield NodesWithPeersResponse(t, id, token, nodes, peers)
 
-      implicit val eqGetPeerNodesResponse: Eq[GetPeersNodesResponse] =
-        Eq.fromUniversalEquals
-    }
-
-    final case class GetPeersResponse(
-        t: Transaction,
-        id: NodeId,
-        token: Token,
-        values: List[Peer]
-    ) extends KMessage
-
-    object GetPeersResponse {
-
-      implicit val bencoder: BEncoder[GetPeersResponse] =
-        BCodec[GetPeersResponse]
-
-      implicit val bdecoder: BDecoder[GetPeersResponse] = for {
-        t     <- BDecoder.at[Transaction]("t")
-        id    <- getRField[NodeId]("id")
-        token <- getRField[Token]("token")
-        peers <- getRField[List[Peer]]("values")
-      } yield GetPeersResponse(t, id, token, peers)
-
-      implicit val eqGetPeersResponse: Eq[GetPeersResponse] =
+      implicit val eqNodesWithPeersResponse: Eq[NodesWithPeersResponse] =
         Eq.fromUniversalEquals
     }
 
@@ -315,8 +297,9 @@ object protocol {
                 BencError.CodecError(s"$q Unsupported query type ").asLeft
             }
           case "r" =>
-            v.as[GetPeersNodesResponse] orElse v.as[GetPeersResponse] orElse v
-              .as[FindNodeResponse] orElse v.as[NodeIdResponse]
+            println(s">>>>>>> BDecoder $v")
+            v.as[NodesWithPeersResponse] orElse v.as[FindNodeResponse] orElse v
+              .as[NodeIdResponse]
 
           case "e" => v.as[RpcErrorMessage]
           case m =>
@@ -382,11 +365,9 @@ object protocol {
         case fn @ FindNodeResponse(t, _, _) =>
           fn.asBType >>= response(t)
 
-        case nr @ GetPeersNodesResponse(t, _, _, _) =>
-          nr.asBType >>= response(t)
-
-        case pr @ GetPeersResponse(t, _, _, _) =>
+        case pr @ NodesWithPeersResponse(t, _, _, _, _) =>
           pr.asBType >>= response(t)
+
       }
     }
 
@@ -425,10 +406,22 @@ object protocol {
           val readSocket = socket
             .reads(readTimeout)
             .flatMap { packet =>
+              println(s">>> reading val: ${FromBenc.instance
+                .fromBenc(BitVector(packet.bytes.toList.toArray))}")
               Stream.eval_(logger.debug("reading")) ++
                 Stream
                   .chunk(packet.bytes)
                   .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
+                  .attempt
+                  .map {
+                    case l @ Left(value) =>
+                      println(s">>>>> Error: $value")
+                      l
+                    case r @ Right(value) =>
+                      println(s">>>>> No Error: $value")
+                      r
+                  }
+                  .rethrow
                   .map((packet.remote, _))
                   .evalTap {
                     case (r, m) =>
@@ -444,7 +437,10 @@ object protocol {
                     .emit(msg)
                     .through(StreamEncoder.many(KMessage.codec).toPipeByte[IO])
                     .chunks
-                    .map(data => Packet(remote, data))
+                    .map { data =>
+                      // println(s">>> values ${FromBenc.instance.fromBenc(BitVector(data.toList.toArray))}")
+                      Packet(remote, data)
+                    }
             }
             .through(socket.writes(readTimeout))
 

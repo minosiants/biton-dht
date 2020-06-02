@@ -1,13 +1,14 @@
 package kademlia
-import benc.{ BDecoder, BEncoder }
+import benc.{ BDecoder, BEncoder, Benc, FromBenc, ToBenc }
 import cats.Eq
 import cats.instances.list._
 import cats.syntax.either._
-import kademlia.protocol.KMessage._
+import kademlia.protocol.KMessage.{ NodesWithPeersResponse, _ }
 import kademlia.protocol._
 import kademlia.types.Node
 import org.scalacheck.Prop._
 import org.scalacheck._
+import scodec.bits.BitVector
 
 class ProtocolEncodingSpec extends KSuite {
 
@@ -18,14 +19,28 @@ class ProtocolEncodingSpec extends KSuite {
   property("RpcErrorMessage")(prop[RpcErrorMessage])
   property("NodeIdResponse")(prop[NodeIdResponse])
   property("FindNodeResponse")(prop[FindNodeResponse])
-  property("GetPeersNodesResponse")(prop[GetPeersNodesResponse])
-  property("GetPeersResponse")(prop[GetPeersResponse])
+  property("GetPeersNodesResponse")(prop[NodesWithPeersResponse])
   property("RpcError") {
     forAll(rpcErrorGen) { e =>
       val encoded = BEncoder[RpcError].encode(e)
       val decoded = encoded.flatMap(BDecoder[RpcError].decode)
       decoded === e.asRight
     }
+  }
+
+  test("get_peers".only) {
+    val req =
+      "d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe"
+    val g = getPeersGen.sample.get
+
+    val result = Benc.fromBenc[GetPeers](BitVector(req.getBytes()))
+    val res2 = result
+      .flatMap(Benc.toBenc[KMessage](_))
+      .map(v => new String(v.toByteArray))
+    println(FromBenc.instance.fromBenc(BitVector(req.getBytes())))
+    println(BEncoder[KMessage].encode(g))
+    true
+
   }
   property("list of nodes") {
     forAll(Gen.nonEmptyListOf(nodeGen())) { l =>
@@ -100,18 +115,12 @@ class ProtocolEncodingSpec extends KSuite {
     nodes  <- Gen.nonEmptyListOf(nodeGen())
   } yield FindNodeResponse(t, nodeId, nodes)
 
-  implicit val getPeerNodesResponse: Gen[GetPeersNodesResponse] = for {
+  implicit val nodesWithPeersResponseGen: Gen[NodesWithPeersResponse] = for {
     t      <- transactionGen
     nodeId <- nodeIdIntGen
     token  <- tokenGen
-    nodes  <- Gen.nonEmptyListOf(nodeGen())
-  } yield GetPeersNodesResponse(t, nodeId, token, nodes)
-
-  implicit val getPeersResponse: Gen[GetPeersResponse] = for {
-    t      <- transactionGen
-    nodeId <- nodeIdIntGen
-    token  <- tokenGen
-    peers  <- Gen.nonEmptyListOf(peerGen)
-  } yield GetPeersResponse(t, nodeId, token, peers)
+    nodes  <- Gen.option(Gen.nonEmptyListOf(nodeGen()))
+    peers  <- Gen.option(Gen.nonEmptyListOf(peerGen))
+  } yield NodesWithPeersResponse(t, nodeId, token, nodes, peers)
 
 }

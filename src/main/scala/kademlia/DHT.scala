@@ -105,12 +105,14 @@ final case class DHTDef(
         case Some(value) => IO(value)
       }
       .flatMap(Stream.emits(_))
-      .map(
-        n =>
+      .map {
+        case NodeInfo(token, node) =>
           client
-            .announcePeer(n, infoHash, port)
-            .handleErrorWith(_ => tableState.markNodeAsBad(n.node))
-      )
+            .announcePeer(node, token, infoHash, port)
+            .handleErrorWith(_ => tableState.markNodeAsBad(node))
+        case _ =>
+          Stream.eval_(logger.debug("announce without token")) ++ Stream.empty
+      }
       .parJoin(8)
       .compile
       .drain
@@ -167,6 +169,7 @@ final case class DHTDef(
         _                  <- logger.error(s"tt $tt")
         _                  <- logger.error(s"stale $stale")
         _                  <- logger.error(s"responded $responded")
+        _                  <- logger.error(s"peers ${peers.size}")
         _                  <- tableState.markNodesAsBad(stale)
         res <- tt
           .markNodesAsStale(stale)

@@ -1,10 +1,12 @@
 package kademlia
 
 import kademlia.TraversalNode.{ Responded, Stale }
-import kademlia.types.NodeInfo
+import kademlia.types.{ NodeId, NodeInfo }
 import org.scalacheck.Prop.forAll
 import org.scalacheck.Gen
 import cats.implicits._
+import kademlia.protocol.InfoHash
+import scodec.bits.BitVector
 
 class TraversalTableSpec extends KSuite {
 
@@ -48,5 +50,30 @@ class TraversalTableSpec extends KSuite {
           t.nodes.takeRight(sizeToTake).collect { case Responded(n, _, _) => n }
         expected.map(_.node) === result
     }
+  }
+  test("sort".only) {
+    def id(i: Int) = NodeId.fromBigInt(BigInt(i))
+    val nodeId     = id(10)
+    val node       = nodeGen().sample.get
+    val nodes = List(
+      node.copy(nodeId = id(7)),
+      node.copy(nodeId = id(12)),
+      node.copy(nodeId = id(1)),
+      node.copy(nodeId = id(11)),
+      node.copy(nodeId = id(5)),
+      node.copy(nodeId = id(8))
+    )
+    val table  = TraversalTable.create(InfoHash(nodeId.value), nodes)
+    val result = table.top(6)
+    println(result.map(_.nodeId.toPrefix).mkString("\n"))
+    println("-----")
+    println(BitVector(10 ^ 11).toBin)
+    println(BitVector(10 ^ 8).toBin)
+    println(BitVector(10 ^ 12).toBin)
+    println(BitVector(10 ^ 1).toBin)
+    println(BitVector(10 ^ 7).toBin)
+    println(BitVector(10 ^ 5).toBin)
+    true
+
   }
 }
