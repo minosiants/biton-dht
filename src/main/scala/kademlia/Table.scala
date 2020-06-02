@@ -209,10 +209,14 @@ object TraversalTable {
       val nodesToAdd =
         n.distinct.filterNot(v => nodes.exists(_.node.nodeId === v.nodeId))
       val result = (nodesToAdd.map(
-        v => Fresh(v, v.nodeId.nodeId.distance(target))
+        v => Fresh(v, v.nodeId.distance(target))
       ) ++ nodes).sortBy(_.distance)
-
-      if (result.take(8).collect { case Responded(_, _, _) => }.size == 8)
+      result.foreach {
+        case Fresh(_, distance)        => println(s"Fresh:  $distance")
+        case Stale(_, distance)        => println(s"Stale:   $distance")
+        case Responded(_, _, distance) => println(s"Responded: $distance")
+      }
+      if (result.take(8).collect { case r @ Responded(_, _, _) => r }.size == 8)
         TraversalTable.Completed(target, result)
       else
         TraversalTable.InProgress(target, result)

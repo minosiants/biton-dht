@@ -114,10 +114,11 @@ class DHTSpec extends KSuite with TableFunctions {
 
   }
 
-  test("load".ignore) {
+  test("load") {
 
     val res = (for {
-      table <- loadTable("")
+      table <- loadTable("fffc21a3f289db8057396725b6cd53d4c0759991.kad")
+      _ = println(s"nodeId ${table.nodeId.value.toHex}")
       _ = println(table)
     } yield table).attempt.unsafeRunSync().toOption.get
     println(res.nodeId.value.toBin)

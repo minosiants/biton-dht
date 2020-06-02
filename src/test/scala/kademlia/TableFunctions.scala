@@ -1,12 +1,14 @@
 package kademlia
 
+import scodec.bits.BitVector
+
 trait TableFunctions {
   def formatBucket(kb: KBucket): String = {
-    val from    = kb.from.value
-    val to      = kb.to.value
-    val nodeIds = kb.nodes.value.map(_.nodeId.toPrefix.value).mkString("\n")
+    val from    = BitVector(kb.from.value.toByteArray).toBin
+    val to      = BitVector(kb.to.value.toByteArray).toBin
+    val nodeIds = kb.nodes.value.map(_.nodeId.value.toBin).mkString("\n")
     val cacheIds =
-      kb.cache.value.value.map(_.nodeId.toPrefix.value).mkString("\n")
+      kb.cache.value.value.map(_.nodeId.value.toBin).mkString("\n")
     s"""
        |===========================================
        |bucket

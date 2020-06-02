@@ -1,21 +1,19 @@
 package kademlia
 
-import java.net.InetSocketAddress
-
-import cats.effect.{ Concurrent, ContextShift, IO, Resource }
+import cats.effect.{ Concurrent, ContextShift, IO }
+import cats.syntax.apply._
+import cats.syntax.option._
 import com.comcast.ip4s.Port
 import fs2.Stream
 import fs2.io.udp.SocketGroup
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import kademlia.protocol._
-import cats.syntax.option._
 import kademlia.protocol.KMessage.{
   FindNodeResponse,
-  GetPeersResponse,
-  NodeIdResponse
+  NodeIdResponse,
+  NodesWithPeersResponse
 }
+import kademlia.protocol._
 import kademlia.types.NodeId
-import cats.syntax.apply._
 
 trait Server {
   def start(): Stream[IO, Unit]
@@ -48,7 +46,7 @@ object Server {
                 logger.debug("GetPeers") *>
                   s.write1(
                     remote,
-                    GetPeersResponse(t, id, Token.gen(), List.empty)
+                    NodesWithPeersResponse(t, id, Token.gen(), None, None)
                   )
               case (
                   remote,

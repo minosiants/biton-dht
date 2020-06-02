@@ -26,7 +26,8 @@ trait Client {
   ): Stream[IO, NodeResponse]
 
   def announcePeer(
-      n: NodeInfo,
+      n: Node,
+      token: Token,
       infoHash: InfoHash,
       port: Port
   ): Stream[IO, NodeIdResponse]
@@ -78,7 +79,8 @@ object Client {
             s.read
         }
         .evalMap {
-          badTransactionId orElse pf orElse badResponse
+          //badTransactionId orElse pf orElse badResponse
+          pf orElse badResponse
         }
         .head
         .attempts(Stream(1.second).repeatN(2))
@@ -124,27 +126,19 @@ object Client {
       ): Stream[IO, NodeResponse] = {
         val req = GetPeers(Transaction.gen(), id, infoHash)
         get[KMessage](node.contact, req) {
-          case (_, r @ GetPeersResponse(_, _, _, _)) =>
+          case (_, r @ NodesWithPeersResponse(_, _, _, _, _)) =>
             IO(r)
-          case (_, r @ GetPeersNodesResponse(_, _, _, _)) =>
-            IO(r)
+
         }.flatMap {
-            case GetPeersNodesResponse(_, _, token, nodes) =>
-              Stream.emit(
-                NodeResponse(
-                  NodeInfo(token, node),
-                  nodes,
-                  Nil
+            case NodesWithPeersResponse(_, _, token, nodes, peers) =>
+              Stream.eval_(logger.error(s"!!! peers: $peers")) ++
+                Stream.emit(
+                  NodeResponse(
+                    NodeInfo(token, node),
+                    nodes.toList.flatten,
+                    peers.toList.flatten
+                  )
                 )
-              )
-            case GetPeersResponse(_, _, token, peers) =>
-              Stream.emit(
-                NodeResponse(
-                  NodeInfo(token, node),
-                  Nil,
-                  peers
-                )
-              )
             case v =>
               Stream.raiseError(Error.ClientError(s"Should not get $v here"))
           }
@@ -159,7 +153,8 @@ object Client {
       }
 
       override def announcePeer(
-          n: NodeInfo,
+          n: Node,
+          token: Token,
           infoHash: InfoHash,
           port: Port
       ): Stream[IO, NodeIdResponse] = {
@@ -169,9 +164,9 @@ object Client {
           id,
           infoHash,
           port,
-          n.token
+          token
         )
-        get[NodeIdResponse](n.node.contact, req) {
+        get[NodeIdResponse](n.contact, req) {
           case (_, r @ NodeIdResponse(_, _)) =>
             IO(r)
         }.attempt.evalTap {
