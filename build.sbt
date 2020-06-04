@@ -17,7 +17,7 @@ val logbackVersion        = "1.2.3"
 lazy val root = (project in file("."))
   .settings(
     organization := "com.minosiants",
-    name := "kademlia",
+    name := "biton-dht",
     scalaVersion := "2.13.1",
     scalacOptions ++= Seq(
       "-Ymacro-annotations",
