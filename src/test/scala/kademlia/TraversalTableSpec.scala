@@ -21,16 +21,16 @@ class TraversalTableSpec extends KSuite {
 
   test("create") {
     forAll(infoHashGen, listOfNodesGen(5)) { (infohash, nodes) =>
-      TraversalTable.create(infohash, nodes) match {
-        case TraversalTable.Completed(_, nodes)  => isSorted(nodes)
-        case TraversalTable.InProgress(_, nodes) => isSorted(nodes)
+      TraversalTable.create(infohash, nodes, 8) match {
+        case TraversalTable.Completed(_, nodes, _)  => isSorted(nodes)
+        case TraversalTable.InProgress(_, nodes, _) => isSorted(nodes)
       }
     }
   }
 
   test("markNodesAsStale") {
     forAll(infoHashGen, Gen.nonEmptyListOf(nodeGen())) { (infohash, nodes) =>
-      val table         = TraversalTable.create(infohash, nodes)
+      val table         = TraversalTable.create(infohash, nodes, 8)
       val expected      = table.nodes.takeRight(1)
       val nodesToUpdate = expected.map(_.node)
       val t             = table.markNodesAsStale(nodesToUpdate)
@@ -41,7 +41,7 @@ class TraversalTableSpec extends KSuite {
   test("markNodesAsResponded") {
     forAll(infoHashGen, Gen.nonEmptyListOf(nodeGen()), tokenGen) {
       (infohash, nodes, token) =>
-        val table         = TraversalTable.create(infohash, nodes)
+        val table         = TraversalTable.create(infohash, nodes, 8)
         val sizeToTake    = table.nodes.size / 2
         val expected      = table.nodes.takeRight(sizeToTake)
         val nodesToUpdate = expected.map(v => NodeInfo(token, v.node))
@@ -51,29 +51,34 @@ class TraversalTableSpec extends KSuite {
         expected.map(_.node) === result
     }
   }
-  test("sort".only) {
-    def id(i: Int) = NodeId.fromBigInt(BigInt(i))
-    val nodeId     = id(10)
-    val node       = nodeGen().sample.get
-    val nodes = List(
-      node.copy(nodeId = id(7)),
-      node.copy(nodeId = id(12)),
-      node.copy(nodeId = id(1)),
-      node.copy(nodeId = id(11)),
-      node.copy(nodeId = id(5)),
-      node.copy(nodeId = id(8))
-    )
-    val table  = TraversalTable.create(InfoHash(nodeId.value), nodes)
-    val result = table.top(6)
-    println(result.map(_.nodeId.toPrefix).mkString("\n"))
-    println("-----")
-    println(BitVector(10 ^ 11).toBin)
-    println(BitVector(10 ^ 8).toBin)
-    println(BitVector(10 ^ 12).toBin)
-    println(BitVector(10 ^ 1).toBin)
-    println(BitVector(10 ^ 7).toBin)
-    println(BitVector(10 ^ 5).toBin)
-    true
+  test("completed") {
+    forAll(infoHashGen, listOfNodesGen(5), tokenGen) {
+      (infohash, nodes, token) =>
+        val table                   = TraversalTable.create(infohash, nodes, 3)
+        val a :: b :: c :: d :: Nil = table.topFresh(4)
+        val result = table
+          .markNodesAsResponded(
+            List(NodeInfo(token, a), NodeInfo(token, c), NodeInfo(token, d))
+          )
+          .markNodeAsStale(b)
+        result match {
+          case TraversalTable.Completed(_, _, _)  => true
+          case TraversalTable.InProgress(_, _, _) => false
+        }
 
+    }
+
+  }
+
+  test("order by distance") {
+    forAll(infoHashGen, Gen.nonEmptyListOf(nodeGen())) { (infohash, nodes) =>
+      val table = TraversalTable.create(infohash, nodes, 8)
+      val order = table.nodes.sliding(2).forall {
+        case x :: y :: Nil => x.distance < y.distance
+        case _ :: Nil      => true
+        case _             => false
+      }
+      order
+    }
   }
 }

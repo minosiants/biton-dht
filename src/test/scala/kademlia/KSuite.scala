@@ -5,18 +5,18 @@ import java.time.{ Clock, Instant, LocalDateTime, ZoneOffset }
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import com.comcast.ip4s.{ IpAddress, Port }
 import kademlia.KBucket.Cache
-import kademlia.types.{ Contact, KSize, Node, NodeId, Prefix }
+import kademlia.types.{ Contact, KSize, Node, NodeId, NodeInfo, Prefix }
 import munit.ScalaCheckSuite
 import org.scalacheck.Gen
 import scodec.bits.BitVector
 import org.scalacheck.cats.implicits._
 import cats.instances.list._
 import cats.syntax.traverse._
-import kademlia.protocol.{ InfoHash, Token }
+import kademlia.protocol.{ InfoHash, Peer, Token }
 
 import scala.concurrent.ExecutionContext
 
-class KSuite extends ScalaCheckSuite {
+class KSuite extends ScalaCheckSuite with KGens {
 
   implicit val clock: Clock                      = Clock.fixed(Instant.now(), ZoneOffset.UTC)
   private val executionContext: ExecutionContext = ExecutionContext.global
@@ -26,6 +26,9 @@ class KSuite extends ScalaCheckSuite {
 
   implicit val ioTimer: Timer[IO] = IO.timer(executionContext)
 
+}
+
+trait KGens {
   val nodeIdIntGen: Gen[NodeId] =
     Gen.chooseNum(0, Integer.MAX_VALUE).map(NodeId.fromInt)
 
@@ -46,6 +49,12 @@ class KSuite extends ScalaCheckSuite {
       .map(IpAddress.fromBytes(_).get)
 
   val portGen: Gen[Port] = Gen.chooseNum(0, 65535).map(Port(_).get)
+
+  val peerGen: Gen[Peer] = for {
+    ip   <- ipV4Gen
+    port <- portGen
+  } yield Peer(ip, port)
+
   val contactGen: Gen[Contact] = for {
     ip   <- ipV4Gen
     port <- portGen
@@ -77,7 +86,7 @@ class KSuite extends ScalaCheckSuite {
       to: Prefix,
       ksize: KSize,
       nsize: Int
-  ): Gen[KBucket] =
+  )(implicit c: Clock): Gen[KBucket] =
     for {
       nodes <- listOfNodesGen(
         nsize,
@@ -99,4 +108,11 @@ class KSuite extends ScalaCheckSuite {
 
   val infoHashGen: Gen[InfoHash] =
     Gen.negNum[Long].map(BitVector.fromLong(_)).map(InfoHash(_))
+
+  val nodeInfoGen: Gen[NodeInfo] = for {
+    token <- tokenGen
+    node  <- nodeGen()
+  } yield NodeInfo(token, node)
+
+  val nodeInfoListGen: Gen[List[NodeInfo]] = Gen.listOf(nodeInfoGen)
 }
