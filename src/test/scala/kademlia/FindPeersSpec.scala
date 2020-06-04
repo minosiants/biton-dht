@@ -27,7 +27,6 @@ class FindPeersSpec extends KSuite {
           nodesForAnnounce <- cache.get(infohash)
         } yield (peers, ts, nodesForAnnounce, expected)).unsafeRunSync()
 
-        println(expected.size)
         nodesForAnnounce.nonEmpty && peers.size == expected.size
     }
   }
@@ -35,7 +34,7 @@ class FindPeersSpec extends KSuite {
 }
 
 object FindPeersSpec extends KGens {
-  val _logger = Slf4jLogger.getLogger[IO]
+
   case class GetPeersClient(
       peersRef: Ref[IO, List[Peer]],
       counter: Ref[IO, Int]

@@ -24,15 +24,14 @@ class KBucketSpec extends KSuite {
   }
 
   test("add to empty kbucket") {
-    forAll(kbGen(ksize, 0), nodeGen(nodeIdChooseGen(0, 10))) {
-      (kbucket, node) =>
-        val result = kbucket.add(node)
-        result === KBucket.create(
-          kbucket.from,
-          kbucket.to,
-          Nodes(List(node), ksize),
-          kbucket.cache
-        )
+    forAll(kbGen(ksize, 0), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
+      val result = kbucket.add(node)
+      result === KBucket.create(
+        kbucket.from,
+        kbucket.to,
+        Nodes(List(node), ksize),
+        kbucket.cache
+      )
     }
   }
 
@@ -48,7 +47,7 @@ class KBucketSpec extends KSuite {
   }
 
   test("add to kbucket cache") {
-    forAll(kbGen(), nodeGen(nodeIdChooseGen(0, 10))) { (kbucket, node) =>
+    forAll(kbGen(), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
       val result = for {
         k  <- kbucket.addToCache(node)
         kk <- k.addToCache(node)
@@ -59,18 +58,26 @@ class KBucketSpec extends KSuite {
 
       result.map(_.cache) === expected.asRight
     }
+  }
+  test("split kbucket") {
+    forAll(kbGen(ksize), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
+      println(kbucket)
+      val result = for {
+        (first, second) <- kbucket.split()
+      } yield checkBuckets(first, second)
 
-    test("split kbucket") {
-      forAll(kbGen(ksize, 0), nodeGen(nodeIdChooseGen(0, 10))) {
-        (kbucket, node) =>
-          val result = for {
-            (first, second) <- kbucket.split()
-          } yield checkBuckets(first, second)
-
-          result == true.asRight
-      }
+      result == true.asRight
     }
+  }
+  test("inRange") {
+    forAll(kbGen(ksize), nodeGen(nodeIdChooseGen(5, 9))) { (kbucket, node) =>
+      println(kbucket)
+      val result = for {
+        (_, second) <- kbucket.split()
+      } yield second.inRange(node.nodeId)
 
+      result == true.asRight
+    }
   }
 
   def checkBuckets(first: KBucket, second: KBucket): Boolean = {
