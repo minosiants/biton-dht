@@ -1,9 +1,9 @@
-## kademlia
+## biton-dht
 
 
 ### Overview
 
-kademlia
+biton-dht
 
 ### Set up
 
