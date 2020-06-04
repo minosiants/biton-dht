@@ -13,6 +13,7 @@ trait TableFunctions {
        |===========================================
        |bucket
        |$from = $to
+       |${kb.from} = ${kb.to}
        |------------------------------------------
        |nodeId
        |$nodeIds

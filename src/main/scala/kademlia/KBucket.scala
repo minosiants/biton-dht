@@ -71,7 +71,7 @@ sealed abstract class KBucket extends Product with Serializable {
         first <- KBucket
           .create(from, mid, Nodes(f, ksize), Cache(Nodes(cf, cksize)))
         second <- KBucket
-          .create(mid + 1, to, Nodes(s, ksize), Cache(Nodes(cs, cksize)))
+          .create(mid, to, Nodes(s, ksize), Cache(Nodes(cs, cksize)))
       } yield (first, second)
   }
 

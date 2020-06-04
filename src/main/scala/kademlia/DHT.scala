@@ -86,14 +86,14 @@ final case class DHTDef(
     timer: Timer[IO],
     clock: Clock
 ) extends DHT {
-  import DHT.logger
+
   override def table: IO[Table] = tableState.get
 
   override def lookup(infoHash: InfoHash): Stream[IO, Peer] =
     Stream
       .eval(tableState.neighbors(infoHash))
       .flatMap(
-        findPeers(_, infoHash)
+        FindPeers(_, infoHash, client, tableState, cache)
       )
 
   override def announce(infoHash: InfoHash, port: Port): IO[Unit] = {
@@ -131,11 +131,6 @@ final case class DHTDef(
       newState <- TableState.create(t2)
     } yield DHTDef(nodeId, newState, cache, client, server)
   }
-
-  def findPeers(
-      nodes: List[Node],
-      infoHash: InfoHash
-  ): Stream[IO, Peer] = FindPeers(nodes, infoHash, client, tableState, cache)
 
   def findNodesFrom(nodes: List[Node], count: Int): IO[List[Node]] = {
     def find =
@@ -314,14 +309,14 @@ final case class FindPeers(
           tt.markNodesAsStale(stale)
             .markNodesAsResponded(responded.map(_.info)) match {
             case t @ TraversalTable.Completed(_, _, _) =>
-              Stream.eval_(logger.error(s"!!! Completed")).drain ++
-                Stream
-                  .eval_(cache.put(infoHash, t.topResponded(8))) ++
+              //Stream.eval_(logger.error(s"!!! Completed")).drain ++
+              Stream
+                .eval_(cache.put(infoHash, t.topResponded(8))) ++
                 Stream.emits(responded.flatMap(_.peers))
             case t @ TraversalTable.InProgress(_, nodes, _) =>
-              Stream.eval_(logger.error(s"!!! InProgress")).drain ++
-                Stream.eval_(logger.error(TraversalTable.log(nodes))).drain ++
-                Stream.emits(responded.flatMap(_.peers)) ++
+              // Stream.eval_(logger.error(s"!!! InProgress")).drain ++
+              // Stream.eval_(logger.error(TraversalTable.log(nodes))).drain ++
+              Stream.emits(responded.flatMap(_.peers)) ++
                 go(t.addNodes(responded.flatMap(_.nodes)))
           }
         }
@@ -333,7 +328,7 @@ final case class FindPeers(
       Stream
         .emit(tt.topFresh(3))
         .through(requestPeers)
-        .through(logResult)
+        //    .through(logResult)
         .through(processResult(tt, go))
 
     go(TraversalTable.create(infoHash, nodes, 8))

@@ -11,8 +11,8 @@ class TableSpec extends KSuite with TableFunctions {
   val from  = Prefix(0)
   val to    = Prefix(10)
 
-  def kbGen(from: Int = 10, to: Int = 10) =
-    kbucketGen(Prefix(0), Prefix(10), ksize, ksize.value)
+  def kbGen(from: Int = 0, to: Int = 10) =
+    kbucketGen(Prefix(from), Prefix(to), ksize, ksize.value)
 
   test("add to empty table") {
     forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
@@ -46,6 +46,7 @@ class TableSpec extends KSuite with TableFunctions {
     }
 
   }
+
   test("table cache does not overlap with not cache") {
     forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
       val table = (for {
@@ -62,10 +63,10 @@ class TableSpec extends KSuite with TableFunctions {
     }
   }
   test("table with three buckets") {
-    forAll(kbGen(), kbGen(10, 20), nodeIdChooseGen(6, 9)) {
+    forAll(kbGen(), kbGen(10, 20), nodeIdChooseGen(11, 19)) {
       (kb1, kb2, nodeId) =>
         val result = for {
-          t1 <- Table.empty(nodeId, ksize, from, to)
+          t1 <- Table.empty(nodeId, ksize, from, Prefix(20))
           t2 <- t1.addNodes(kb2.nodes.value)
           t3 <- t2.addNodes(kb1.nodes.value)
           id   = availableIds(t3.kbuckets.head).head

@@ -20,7 +20,7 @@ import scodec.bits._
 
 class DHTSpec extends KSuite with TableFunctions {
 
-  test("bootstrap") {
+  test("bootstrap".ignore) {
 
     val bs = Blocker[IO]
       .use { blocker =>
@@ -86,7 +86,7 @@ class DHTSpec extends KSuite with TableFunctions {
         }
       }
   }
-  test("lookup".only) {
+  test("lookup".ignore) {
     val bits      = hex"01c8c9ea65fe48a0bb02127c898bef9644b99fe0"
     val infoHash  = InfoHash(bits.bits)
     val tableName = "ecd4b88252f2699718fb871380cafc8d77b6db5c.kad"
@@ -121,7 +121,7 @@ class DHTSpec extends KSuite with TableFunctions {
 
   }
 
-  test("load") {
+  test("load".ignore) {
 
     val res = (for {
       table <- loadTable("fffc21a3f289db8057396725b6cd53d4c0759991.kad")
