@@ -18,14 +18,14 @@ class FindPeersSpec extends KSuite {
 
     forAll(infoHashGen, Gen.nonEmptyListOf(nodeGen()), nodeIdIntGen) {
       (infohash, nodes, nodeId) =>
-        val (peers, tableState, nodesForAnnounce, expected) = (for {
+        val (peers, nodesForAnnounce, expected) = (for {
           ts               <- TableState.empty(nodeId)
           cache            <- NodeInfoCache.create(1.minute)
           client           <- GetPeersClient()
           peers            <- FindPeers(nodes.take(3), infohash, client, ts, cache).compile.toList
           expected         <- client.getExpectedPeers
           nodesForAnnounce <- cache.get(infohash)
-        } yield (peers, ts, nodesForAnnounce, expected)).unsafeRunSync()
+        } yield (peers, nodesForAnnounce, expected)).unsafeRunSync()
 
         nodesForAnnounce.nonEmpty && peers.size == expected.size
     }
