@@ -45,10 +45,4 @@ class NodeInfoCacheSpec extends KSuite {
   val distanceGen: Gen[Distance] =
     Gen.negNum[Long].map(BigInt(_)).map(Distance(_))
 
-  val nodeInfoGen: Gen[NodeInfo] = for {
-    token <- tokenGen
-    node  <- nodeGen()
-  } yield NodeInfo(token, node)
-
-  val nodeInfoListGen: Gen[List[NodeInfo]] = Gen.listOf(nodeInfoGen)
 }

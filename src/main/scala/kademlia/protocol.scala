@@ -100,6 +100,8 @@ object protocol {
 
     implicit val bdecoder: BDecoder[Peer] = BDecoder.sc[Peer]
     implicit val bencoder: BEncoder[Peer] = BEncoder.sc[Peer]
+
+    implicit val eqPeer: Eq[Peer] = Eq.fromUniversalEquals
   }
 
   @newtype final case class Transaction(value: BitVector)
@@ -297,7 +299,6 @@ object protocol {
                 BencError.CodecError(s"$q Unsupported query type ").asLeft
             }
           case "r" =>
-            println(s">>>>>>> BDecoder $v")
             v.as[NodesWithPeersResponse] orElse v.as[FindNodeResponse] orElse v
               .as[NodeIdResponse]
 
@@ -406,27 +407,14 @@ object protocol {
           val readSocket = socket
             .reads(readTimeout)
             .flatMap { packet =>
-              println(s">>> reading val: ${FromBenc.instance
-                .fromBenc(BitVector(packet.bytes.toList.toArray))}")
-              Stream.eval_(logger.debug("reading")) ++
-                Stream
-                  .chunk(packet.bytes)
-                  .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
-                  .attempt
-                  .map {
-                    case l @ Left(value) =>
-                      println(s">>>>> Error: $value")
-                      l
-                    case r @ Right(value) =>
-                      println(s">>>>> No Error: $value")
-                      r
-                  }
-                  .rethrow
-                  .map((packet.remote, _))
-                  .evalTap {
-                    case (r, m) =>
-                      logger.debug(s"read: $m")
-                  }
+              Stream
+                .chunk(packet.bytes)
+                .through(StreamDecoder.many(KMessage.codec).toPipeByte[IO])
+                .map((packet.remote, _))
+                .evalTap {
+                  case (_, m) =>
+                    logger.debug(s"read: $m")
+                }
             }
 
           val writeOutput = outgoing.dequeue
@@ -438,7 +426,6 @@ object protocol {
                     .through(StreamEncoder.many(KMessage.codec).toPipeByte[IO])
                     .chunks
                     .map { data =>
-                      // println(s">>> values ${FromBenc.instance.fromBenc(BitVector(data.toList.toArray))}")
                       Packet(remote, data)
                     }
             }
@@ -466,11 +453,7 @@ object protocol {
         .resource {
           sg.open(new InetSocketAddress(port.map(_.value).getOrElse(0)))
             .flatMap { s =>
-              def close() = {
-                logger.debug("close") *> s.close
-
-              }
-              Resource(IO(s).map(_ -> close))
+              Resource(IO(s).map(_ -> s.close))
             }
         }
         .flatMap(socket => Stream.eval(KMessageSocket(socket, readTimeout)))

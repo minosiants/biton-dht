@@ -7,7 +7,8 @@ trait NodeIdSyntax {
 }
 
 final class NodeIdOps(val nodeId: NodeId) extends AnyVal {
-  def toPrefix: Prefix         = Prefix(BigInt(1, nodeId.value.toByteArray))
+  def toBigInt: BigInt         = BigInt(1, nodeId.value.toByteArray)
+  def toPrefix: Prefix         = Prefix(toBigInt)
   def ^(other: NodeId): NodeId = NodeId(nodeId.value ^ other.value)
   def distance(other: NodeId): Distance =
     Distance(

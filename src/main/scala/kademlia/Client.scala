@@ -16,25 +16,36 @@ import kademlia.types._
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-trait Client {
-
-  def ping(node: Node): Stream[IO, NodeIdResponse]
-  def findNode(contact: Contact, target: NodeId): Stream[IO, List[Node]]
-  def getPeers(
-      node: Node,
-      infoHash: InfoHash
-  ): Stream[IO, NodeResponse]
-
-  def announcePeer(
-      n: Node,
-      token: Token,
-      infoHash: InfoHash,
-      port: Port
-  ): Stream[IO, NodeIdResponse]
-
-}
+trait Client
+    extends Client.Ping
+    with Client.FindNode
+    with Client.GetPeers
+    with Client.AnnouncePeer
 
 object Client {
+
+  trait Ping {
+    def ping(node: Node): Stream[IO, NodeIdResponse]
+  }
+  trait FindNode {
+    def findNode(contact: Contact, target: NodeId): Stream[IO, List[Node]]
+  }
+  trait GetPeers {
+    def getPeers(
+        node: Node,
+        infoHash: InfoHash
+    ): Stream[IO, NodeResponse]
+  }
+
+  trait AnnouncePeer {
+    def announcePeer(
+        n: Node,
+        token: Token,
+        infoHash: InfoHash,
+        port: Port
+    ): Stream[IO, NodeIdResponse]
+  }
+
   val logger = Slf4jLogger.getLogger[IO]
 
   def apply(

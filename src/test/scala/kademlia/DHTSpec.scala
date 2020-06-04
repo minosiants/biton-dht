@@ -73,23 +73,30 @@ class DHTSpec extends KSuite with TableFunctions {
     true
   }
 
-  test("lookup".only) {
-    val bits     = hex"311aeba8ecb3f5b9ba8935bf326f049e63cc5967"
-    val infoHash = InfoHash(bits.bits)
-    val bs = Blocker[IO]
+  def withDHT[A](tableName: String)(f: DHT => IO[A]): IO[A] = {
+    Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           for {
-            table <- loadTable("fffc21a3f289db8057396725b6cd53d4c0759991.kad")
-            res <- DHT
+            table <- loadTable(tableName)
+            dht <- DHT
               .fromTable(sg, Port(6881).get, table)
-              .flatMap(_.lookup(infoHash))
+            res <- f(dht)
           } yield res
         }
       }
+  }
+  test("lookup".only) {
+    val bits      = hex"01c8c9ea65fe48a0bb02127c898bef9644b99fe0"
+    val infoHash  = InfoHash(bits.bits)
+    val tableName = "ecd4b88252f2699718fb871380cafc8d77b6db5c.kad"
+    val peers = withDHT(tableName) { dht =>
+      dht.lookup(infoHash).compile.toList
+    }
 
-    val result = bs.unsafeRunSync()
+    val result = peers.unsafeRunSync()
     println(result)
+    println(result.size)
     true
   }
 

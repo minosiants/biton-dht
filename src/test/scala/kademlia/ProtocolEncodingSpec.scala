@@ -28,20 +28,6 @@ class ProtocolEncodingSpec extends KSuite {
     }
   }
 
-  test("get_peers".only) {
-    val req =
-      "d1:ad2:id20:abcdefghij01234567899:info_hash20:mnopqrstuvwxyz123456e1:q9:get_peers1:t2:aa1:y1:qe"
-    val g = getPeersGen.sample.get
-
-    val result = Benc.fromBenc[GetPeers](BitVector(req.getBytes()))
-    val res2 = result
-      .flatMap(Benc.toBenc[KMessage](_))
-      .map(v => new String(v.toByteArray))
-    println(FromBenc.instance.fromBenc(BitVector(req.getBytes())))
-    println(BEncoder[KMessage].encode(g))
-    true
-
-  }
   property("list of nodes") {
     forAll(Gen.nonEmptyListOf(nodeGen())) { l =>
       val encoded = Node.bencoder.encode(l)
@@ -60,11 +46,6 @@ class ProtocolEncodingSpec extends KSuite {
 
   val rpcErrorCodeGen: Gen[RpcErrorCode] =
     Gen.oneOf(201, 202, 203, 204).map(RpcErrorCode.find(_).get)
-
-  val peerGen: Gen[Peer] = for {
-    ip   <- ipV4Gen
-    port <- portGen
-  } yield Peer(ip, port)
 
   def transactionGen: Gen[Transaction] = Gen.const(Transaction.gen())
 

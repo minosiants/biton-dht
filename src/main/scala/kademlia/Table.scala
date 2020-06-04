@@ -2,17 +2,20 @@ package kademlia
 
 import java.time.Clock
 
+import cats.Show
 import cats.data.NonEmptyVector
 import cats.instances.int._
 import cats.syntax.either._
 import cats.syntax.foldable._
 import cats.syntax.eq._
+import cats.syntax.show._
 import kademlia.KBucket.{ Cache, FullBucket }
 import kademlia.TraversalNode.{ Fresh, Responded, Stale }
 import kademlia.TraversalTable.{ Completed, InProgress }
 import kademlia.protocol.InfoHash
 import kademlia.types._
 
+import scala.Function._
 import scala.annotation.tailrec
 
 trait Table extends Product with Serializable {
@@ -145,6 +148,25 @@ final case class KTable(
 sealed abstract class TraversalNode {
   def distance: Distance
   def node: Node
+  def fold[A](
+      fresh: (Node, Distance) => A,
+      stale: (Node, Distance) => A,
+      responded: (Node, NodeInfo, Distance) => A
+  ): A = this match {
+    case Fresh(node, distance)           => fresh(node, distance)
+    case Stale(node, distance)           => stale(node, distance)
+    case Responded(node, info, distance) => responded(node, info, distance)
+  }
+  def isFresh: Boolean =
+    fold((_, _) => true, (_, _) => false, (_, _, _) => false)
+  def nonFresh: Boolean = !isFresh
+  def isStale: Boolean =
+    fold((_, _) => false, (_, _) => true, (_, _, _) => false)
+  def nonStale: Boolean = !isStale
+  def isResponded: Boolean =
+    fold((_, _) => false, (_, _) => false, (_, _, _) => true)
+  def nonResponded: Boolean = !isResponded
+
 }
 object TraversalNode {
   final case class Fresh(node: Node, distance: Distance) extends TraversalNode
@@ -152,10 +174,20 @@ object TraversalNode {
   final case class Responded(node: Node, info: NodeInfo, distance: Distance)
       extends TraversalNode
 
+  implicit val showTraversalNode: Show[TraversalNode] = Show.show {
+    case Fresh(node, distance) =>
+      s"Fresh:     ${node.nodeId.toBigInt} distance: $distance"
+    case Stale(node, distance) =>
+      s"Stale:     ${node.nodeId.toBigInt} distance: $distance"
+    case Responded(node, _, distance) =>
+      s"Responded: ${node.nodeId.toBigInt} distance: $distance"
+  }
 }
+
 sealed abstract class TraversalTable {
   def target: NodeId
   def nodes: List[TraversalNode]
+  def completeSize: Int
 
   def markNodesAsStale(n: List[Node]): TraversalTable = {
     n match {
@@ -181,51 +213,69 @@ sealed abstract class TraversalTable {
     }
   }
 
-  def top(n: Int): List[Node] = nodes.collect { case Fresh(n, _) => n }.take(n)
+  def topFresh(n: Int): List[Node] =
+    nodes.collect { case Fresh(node, _) => node }.take(n)
 
-  def lastResponded: List[Responded] = nodes.collect {
-    case r @ Responded(_, _, _) => r
-  }
+  def topResponded(n: Int): List[NodeInfo] =
+    nodes
+      .collect {
+        case r @ Responded(_, info, _) => info
+      }
+      .take(n)
 
-  def updateNode(n: Node)(f: TraversalNode => TraversalNode): TraversalTable =
+  def updateNode(n: Node)(f: TraversalNode => TraversalNode): TraversalTable = {
+    def isComplete(l: List[TraversalNode]): Boolean = {
+      l.takeWhile(_.nonFresh).count(_.isResponded) >= completeSize
+    }
+
     nodes.zipWithIndex.find { case (el, _) => el.node.nodeId === n.nodeId } match {
       case None => this
       case Some((node, i)) =>
         this match {
-          case Completed(target, _) =>
-            Completed(target, nodes.updated(i, f(node)))
-          case TraversalTable.InProgress(target, _) =>
-            InProgress(target, nodes.updated(i, f(node)))
+          case Completed(target, _, s) =>
+            Completed(target, nodes.updated(i, f(node)), s)
+          case TraversalTable.InProgress(target, _, s) =>
+            val _nodes = nodes.updated(i, f(node))
+            if (isComplete(_nodes))
+              Completed(target, _nodes, s)
+            else
+              InProgress(target, _nodes, s)
         }
     }
+  }
 
 }
 
 object TraversalTable {
-  final case class InProgress(target: NodeId, nodes: List[TraversalNode])
-      extends TraversalTable {
-
+  final case class InProgress(
+      target: NodeId,
+      nodes: List[TraversalNode],
+      completeSize: Int
+  ) extends TraversalTable {
     def addNodes(n: List[Node]): TraversalTable = {
       val nodesToAdd =
         n.distinct.filterNot(v => nodes.exists(_.node.nodeId === v.nodeId))
       val result = (nodesToAdd.map(
         v => Fresh(v, v.nodeId.distance(target))
       ) ++ nodes).sortBy(_.distance)
-      result.foreach {
-        case Fresh(_, distance)        => println(s"Fresh:  $distance")
-        case Stale(_, distance)        => println(s"Stale:   $distance")
-        case Responded(_, _, distance) => println(s"Responded: $distance")
-      }
-      if (result.take(8).collect { case r @ Responded(_, _, _) => r }.size == 8)
-        TraversalTable.Completed(target, result)
-      else
-        TraversalTable.InProgress(target, result)
-
+      TraversalTable.InProgress(target, result, completeSize)
     }
-  }
-  final case class Completed(target: NodeId, nodes: List[TraversalNode])
-      extends TraversalTable
 
-  def create(infoHash: InfoHash, nodes: List[Node]): TraversalTable =
-    InProgress(NodeId(infoHash.value), Nil).addNodes(nodes)
+  }
+
+  final case class Completed(
+      target: NodeId,
+      nodes: List[TraversalNode],
+      completeSize: Int
+  ) extends TraversalTable
+
+  def create(
+      infoHash: InfoHash,
+      nodes: List[Node],
+      completeSize: Int
+  ): TraversalTable =
+    InProgress(NodeId(infoHash.value), Nil, completeSize).addNodes(nodes)
+
+  def log(l: List[TraversalNode]): String =
+    s"""\n ${l.map(_.show).mkString("\n")}"""
 }
