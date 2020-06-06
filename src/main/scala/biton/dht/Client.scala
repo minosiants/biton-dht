@@ -91,7 +91,7 @@ object Client {
             s.read
         }
         .evalMap {
-          //badTransactionId orElse pf orElse badResponse
+          badTransactionId orElse pf orElse badResponse
           pf orElse badResponse
         }
         .head

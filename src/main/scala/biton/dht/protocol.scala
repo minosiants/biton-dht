@@ -70,7 +70,9 @@ object protocol {
     )
 
   }
-  @newtype final case class InfoHash(value: BitVector)
+  @newtype final case class InfoHash(value: BitVector) {
+    def toHex: String = value.toHex
+  }
 
   object InfoHash {
     implicit val codec: BCodec[InfoHash] =
@@ -182,7 +184,14 @@ object protocol {
       implicit val eqGetPeers: Eq[GetPeers] = Eq.fromUniversalEquals
     }
 
-    @newtype final case class ImpliedPort(value: Boolean)
+    @newtype final case class ImpliedPort(value: Boolean) {
+
+      def implied[A](ifTrue: => A, ifFalse: => A): A =
+        if (value)
+          ifTrue
+        else
+          ifFalse
+    }
     object ImpliedPort {
       implicit val bcodec: BCodec[ImpliedPort] = BCodec.intBCodec.xmap(
         i => ImpliedPort(i > 0),
