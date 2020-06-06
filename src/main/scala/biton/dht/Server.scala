@@ -1,19 +1,32 @@
 package biton.dht
 
 import java.net.InetSocketAddress
+import java.time.Clock
 
 import biton.dht.protocol.KMessage._
-import biton.dht.protocol.{ InfoHash, KMessage, KMessageSocket, Peer, Token }
+import biton.dht.protocol.{
+  InfoHash,
+  KMessage,
+  KMessageSocket,
+  Peer,
+  RpcError,
+  RpcErrorCode,
+  Token,
+  Transaction
+}
 import biton.dht.types.{ Node, NodeId }
 import cats.effect.concurrent.Ref
-import cats.effect.{ Concurrent, ContextShift, IO }
+import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import cats.syntax.apply._
+import cats.syntax.applicative._
 import cats.syntax.option._
 import cats.syntax.functor._
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.Stream
 import fs2.io.udp.SocketGroup
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
+import scala.concurrent.duration.FiniteDuration
 
 trait Server {
   def start(): Stream[IO, Unit]
@@ -26,6 +39,7 @@ object Server {
       id: NodeId,
       table: TableState,
       store: PeerStore,
+      tokens: TokenCache,
       sg: SocketGroup,
       port: Port
   )(
@@ -38,8 +52,15 @@ object Server {
         .map(Node(nodeId, _))
         .fold(_ => IO(()), table.addNode(_).void)
     }
-    def validateToken(token: Token): IO[Token] = {
-      ???
+    def validateToken(token: Token, t: Transaction)(
+        ifValid: Token => IO[KMessage]
+    ): IO[KMessage] = {
+      for {
+        valid <- tokens.isValid(token)
+        msg <- if (valid) ifValid(token)
+        else
+          RpcErrorMessage(t, RpcError(RpcErrorCode.`203`, "Invalid token")).pure
+      } yield msg
     }
     override def start(): Stream[IO, Unit] = {
 
@@ -91,13 +112,17 @@ object Server {
                   ) =>
                 for {
                   _ <- logger.debug("AnnouncePeer")
-                  _ <- validateToken(token)
-                  _ <- addNode(senderId, remote)
-                  peer <- IO.fromEither(
-                    impliedPort.implied(remote.toPeer(port), remote.toPeer())
-                  )
-                  _ <- store.add(infoHash, peer)
-                  _ <- s.write1(remote, NodeIdResponse(t, id))
+                  msg <- validateToken(token, t) { _ =>
+                    for {
+                      _ <- addNode(senderId, remote)
+                      peer <- IO.fromEither(
+                        impliedPort
+                          .implied(remote.toPeer(port), remote.toPeer())
+                      )
+                      _ <- store.add(infoHash, peer)
+                    } yield NodeIdResponse(t, id)
+                  }
+                  _ <- s.write1(remote, msg)
                 } yield ()
 
               case _ =>
@@ -129,6 +154,30 @@ object PeerStore {
 
         override def get(infoHash: InfoHash): IO[Option[List[Peer]]] =
           ref.get.map(_.get(infoHash.toHex).map(_.toList))
+      }
+    }
+}
+
+trait TokenCache {
+  def isValid(token: Token): IO[Boolean]
+  def put(token: Token): IO[Unit]
+  def purgeExpired: IO[Unit]
+}
+
+object TokenCache {
+  def create(
+      expires: FiniteDuration
+  )(implicit timer: Timer[IO], clock: Clock): IO[TokenCache] =
+    MemCache.empty[String, Token](expires).map { cache =>
+      new TokenCache {
+        override def isValid(token: Token): IO[Boolean] =
+          cache.get(token.toHex).map(_.isDefined)
+
+        override def put(token: Token): IO[Unit] = {
+          cache.put(token.toHex, token)
+        }
+
+        override def purgeExpired: IO[Unit] = cache.purgeExpired
       }
     }
 }

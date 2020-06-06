@@ -11,6 +11,7 @@ import scala.concurrent.duration.FiniteDuration
 trait MemCache[A, B] {
   def get(key: A): IO[Option[B]]
   def put(key: A, value: B): IO[Unit]
+  def purgeExpired: IO[Unit]
 }
 object MemCache {
 
@@ -53,7 +54,7 @@ object MemCache {
         cache ++ Map(key -> Timestamped(value, expires))
       }
 
-    def purgeExpired: IO[Unit] = {
+    override def purgeExpired: IO[Unit] = {
       ref.update { cache =>
         cache.keys.foldLeft(cache) { (c, key) =>
           c.get(key).fold(cache) {
