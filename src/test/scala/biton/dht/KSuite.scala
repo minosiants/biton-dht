@@ -3,7 +3,7 @@ package biton.dht
 import java.time.{ Clock, Instant, ZoneOffset }
 
 import biton.dht.KBucket.Cache
-import biton.dht.protocol.{ InfoHash, Peer, Secret, Token }
+import biton.dht.protocol.{ InfoHash, Peer, Token }
 import biton.dht.types._
 import cats.effect.{ ContextShift, IO, Timer }
 import cats.instances.list._
@@ -104,9 +104,8 @@ trait KGens {
     Set.range(kb.from.value.toInt, kb.to.value.toInt) &~ ids.toSet
   }
 
-  val tokenGen: Gen[Token] = for {
-    ip <- ipV4Gen
-  } yield Token(ip, Secret.gen)
+  val tokenGen: Gen[Token] =
+    bitVectorGen(2 * 8).map(Token(_))
 
   val infoHashGen: Gen[InfoHash] =
     Gen.negNum[Long].map(BitVector.fromLong(_)).map(InfoHash(_))

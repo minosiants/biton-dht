@@ -55,11 +55,13 @@ object Server {
         .map(Node(nodeId, _))
         .fold(_ => IO(()), table.addNode(_).void)
     }
-    def validateToken(token: Token, t: Transaction)(
+    def validateToken(token: Token, ipAddress: IpAddress, t: Transaction)(
         ifValid: Token => IO[KMessage]
     ): IO[KMessage] = {
       for {
-        valid <- secrets.isValid(token.secret)
+        (sec1, sec2) <- secrets.both
+        valid = Token.create(ipAddress, sec1) === token || Token
+          .create(ipAddress, sec2) === token
         msg <- if (valid) ifValid(token)
         else
           RpcErrorMessage(t, RpcError(RpcErrorCode.`203`, "Invalid token")).pure
@@ -98,7 +100,7 @@ object Server {
                     NodesWithPeersResponse(
                       t,
                       id,
-                      Token(contact.ip, secret),
+                      Token.create(contact.ip, secret),
                       nodes.some,
                       peers
                     )
@@ -117,8 +119,9 @@ object Server {
                   )
                   ) =>
                 for {
-                  _ <- logger.debug("AnnouncePeer")
-                  msg <- validateToken(token, t) { _ =>
+                  _       <- logger.debug("AnnouncePeer")
+                  contact <- IO.fromEither(remote.toContact)
+                  msg <- validateToken(token, contact.ip, t) { _ =>
                     for {
                       _ <- addNode(senderId, remote)
                       peer <- IO.fromEither(
@@ -166,7 +169,7 @@ object PeerStore {
 
 trait Secrets {
   def get: IO[Secret]
-  def isValid(secret: Secret): IO[Boolean]
+  def both: IO[(Secret, Secret)]
 }
 
 object Secrets {
@@ -179,12 +182,8 @@ object Secrets {
     val secretsResRef = Ref[IO].of((Secret.gen, Secret.gen)).map { ref =>
       case class SecretsRes(refreshFiber: Option[Fiber[IO, Unit]])
           extends Secrets {
-        override def get: IO[Secret] = ref.get.map { case (sec1, _) => sec1 }
-
-        override def isValid(secret: Secret): IO[Boolean] =
-          ref.get.map {
-            case (sec1, sec2) => secret === sec1 || secret === sec2
-          }
+        override def get: IO[Secret]            = ref.get.map { case (sec1, _) => sec1 }
+        override def both: IO[(Secret, Secret)] = ref.get
 
         def stop(): IO[Unit] =
           refreshFiber.fold(IO(()))(_.cancel)
@@ -204,6 +203,7 @@ object Secrets {
               (result, result -> ())
           }
         }
+
       }
       SecretsRes(None)
     }
