@@ -21,12 +21,5 @@ class SecretsSpec extends KSuite {
       } yield s1 =!= s2
     }
   }
-  test("is valid secret") {
-    Secrets.create(100.millis).use { secrets =>
-      for {
-        s1      <- secrets.get
-        isValid <- secrets.isValid(s1)
-      } yield isValid
-    }
-  }
+ 
 }

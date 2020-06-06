@@ -18,7 +18,7 @@ import scodec.{ Attempt, Codec, DecodeResult, Err }
 import scodec.codecs._
 import cats.syntax.flatMap._
 import cats.syntax.eq._
-import fs2.{ Chunk, Stream }
+import fs2.{ Pure, Stream, hash }
 import fs2.concurrent.Queue
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
@@ -92,17 +92,24 @@ object protocol {
       Eq.instance((a, b) => a.value === b.value)
   }
 
-  final case class Token(ip: IpAddress, secret: Secret)
-      extends Product
-      with Serializable
-  object Token {
+  @newtype final case class Token(value: BitVector)
 
-    implicit val codec: Codec[Token] =
-      (ipAddressScocec :: Secret.codec).as[Token]
-    implicit val bdecoder: BDecoder[Token] = BDecoder.sc[Token]
-    implicit val bencoder: BEncoder[Token] = BEncoder.sc[Token]
+  object Token {
+    def create(ip: IpAddress, secret: Secret): Token = {
+      val hashed = Stream
+        .emits((BitVector(ip.toBytes) ++ secret.value).toByteArray)
+        .through(hash.sha1)
+        .through(hash.sha1)
+        .compile
+        .toList
+      Token(BitVector(hashed))
+    }
+
+    implicit val bcodec: BCodec[Token] =
+      BCodec.bitVectorBCodec.xmap(Token(_), _.value)
+
     implicit val eqToken: Eq[Token] =
-      Eq.instance((a, b) => a.ip.equals(b.ip) && a.secret === b.secret)
+      Eq.instance((a, b) => a.value === b.value)
   }
 
   final case class Peer(ip: IpAddress, port: Port)
