@@ -17,7 +17,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import protocol.InfoHash
 import types.NodeId
 import scodec.bits._
-
+import scala.concurrent.duration._
 class DHTSpec extends KSuite with TableFunctions {
 
   test("bootstrap".ignore) {
@@ -25,12 +25,13 @@ class DHTSpec extends KSuite with TableFunctions {
     val bs = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          for {
-            store <- PeerStore.inmemory()
-            dht   <- DHT.bootstrap(sg, Port(6881).get, store)
-            table <- dht.table
-          } yield table
-
+          Secrets.create(1.minute).use { secrets =>
+            for {
+              store <- PeerStore.inmemory()
+              dht   <- DHT.bootstrap(sg, Port(6881).get, store, secrets)
+              table <- dht.table
+            } yield table
+          }
         }
       }
 
@@ -82,13 +83,15 @@ class DHTSpec extends KSuite with TableFunctions {
     Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          for {
-            store <- PeerStore.inmemory()
-            table <- loadTable(tableName)
-            dht <- DHT
-              .fromTable(sg, Port(6881).get, table, store)
-            res <- f(dht)
-          } yield res
+          Secrets.create(1.minute).use { secrets =>
+            for {
+              store <- PeerStore.inmemory()
+              table <- loadTable(tableName)
+              dht <- DHT
+                .fromTable(sg, Port(6881).get, table, store, secrets)
+              res <- f(dht)
+            } yield res
+          }
         }
       }
   }

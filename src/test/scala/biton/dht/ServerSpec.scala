@@ -19,23 +19,23 @@ class ServerSpec extends KSuite {
     Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          val s = for {
-            table  <- TableState.empty(serverNode.nodeId)
-            store  <- PeerStore.inmemory()
-            tokens <- TokenCache.create(1.minute)
-            server = Server(
-              serverNode.nodeId,
-              table,
-              store,
-              tokens,
-              sg,
-              serverNode.contact.port
-            )
-          } yield server.start()
-          val c =
-            f(Client(clientNodeId, sg))
-          c.concurrently(Stream.eval_(s)).compile.toList.map(_.head)
-
+          Secrets.create(1.minute).use { secrets =>
+            val s = for {
+              table <- TableState.empty(serverNode.nodeId)
+              store <- PeerStore.inmemory()
+              server = Server(
+                serverNode.nodeId,
+                table,
+                store,
+                secrets,
+                sg,
+                serverNode.contact.port
+              )
+            } yield server.start()
+            val c =
+              f(Client(clientNodeId, sg))
+            c.concurrently(Stream.eval_(s)).compile.toList.map(_.head)
+          }
         }
       }
   test("ping") {

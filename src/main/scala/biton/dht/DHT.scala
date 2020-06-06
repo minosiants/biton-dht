@@ -35,7 +35,8 @@ object DHT {
       sg: SocketGroup,
       port: Port,
       table: Table,
-      store: PeerStore
+      store: PeerStore,
+      secrets: Secrets
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
@@ -48,8 +49,7 @@ object DHT {
     for {
       tableState <- TableState.create(table)
       cache      <- NodeInfoCache.create(10.minutes)
-      tokens     <- TokenCache.create(10.minutes)
-      server = Server(table.nodeId, tableState, store, tokens, sg, port)
+      server = Server(table.nodeId, tableState, store, secrets, sg, port)
     } yield DHTDef(table.nodeId, tableState, cache, client, server)
   }
 
@@ -57,6 +57,7 @@ object DHT {
       sg: SocketGroup,
       port: Port,
       store: PeerStore,
+      secrets: Secrets,
       nodeId: NodeId = NodeId.gen(),
       nodes: IO[List[Node]] = BootstrapNodes()
   )(
@@ -70,8 +71,7 @@ object DHT {
     for {
       tableState <- TableState.empty(nodeId)
       cache      <- NodeInfoCache.create(10.minutes)
-      tokens     <- TokenCache.create(10.minutes)
-      server = Server(nodeId, tableState, store, tokens, sg, port)
+      server = Server(nodeId, tableState, store, secrets, sg, port)
       _nodes <- nodes
       dht    <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
     } yield dht
