@@ -19,10 +19,20 @@ class ServerSpec extends KSuite {
     Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          val s = Server(serverNode.nodeId, sg, serverNode.contact.port).start()
+          val s = for {
+            table <- TableState.empty(serverNode.nodeId)
+            store <- PeerStore.inmemory()
+            server = Server(
+              serverNode.nodeId,
+              table,
+              store,
+              sg,
+              serverNode.contact.port
+            )
+          } yield server.start()
           val c =
             f(Client(clientNodeId, sg))
-          c.concurrently(s).compile.toList.map(_.head)
+          c.concurrently(Stream.eval_(s)).compile.toList.map(_.head)
 
         }
       }

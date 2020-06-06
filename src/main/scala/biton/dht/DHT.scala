@@ -34,7 +34,8 @@ object DHT {
   def fromTable(
       sg: SocketGroup,
       port: Port,
-      table: Table
+      table: Table,
+      store: PeerStore
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
@@ -43,16 +44,18 @@ object DHT {
   ): IO[DHT] = {
 
     val client = Client(table.nodeId, sg)
-    val server = Server(table.nodeId, sg, port)
+
     for {
       tableState <- TableState.create(table)
       cache      <- NodeInfoCache.create(10.minutes)
+      server = Server(table.nodeId, tableState, store, sg, port)
     } yield DHTDef(table.nodeId, tableState, cache, client, server)
   }
 
   def bootstrap(
       sg: SocketGroup,
       port: Port,
+      store: PeerStore,
       nodeId: NodeId = NodeId.gen(),
       nodes: IO[List[Node]] = BootstrapNodes()
   )(
@@ -62,12 +65,13 @@ object DHT {
       clock: Clock
   ): IO[DHT] = {
     val client = Client(nodeId, sg)
-    val server = Server(nodeId, sg, port)
+
     for {
       tableState <- TableState.empty(nodeId)
       cache      <- NodeInfoCache.create(10.minutes)
-      _nodes     <- nodes
-      dht        <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
+      server = Server(nodeId, tableState, store, sg, port)
+      _nodes <- nodes
+      dht    <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
     } yield dht
   }
 
@@ -208,6 +212,8 @@ trait TableState {
     update(_.markNodesAsBad(n))
   def neighbors(infoHash: InfoHash): IO[List[Node]] =
     get.map(_.neighbors(NodeId(infoHash.value)))
+  def neighborsOf(nodeId: NodeId): IO[List[Node]] =
+    get.map(_.neighbors(nodeId))
 }
 
 object TableState {

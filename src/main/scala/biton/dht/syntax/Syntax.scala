@@ -6,3 +6,4 @@ trait Syntax
     with PrefixSyntax
     with ByteSyntax
     with ThrowableSyntax
+    with InetSocketAddressSyntax

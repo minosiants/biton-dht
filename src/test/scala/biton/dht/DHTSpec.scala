@@ -25,7 +25,12 @@ class DHTSpec extends KSuite with TableFunctions {
     val bs = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          DHT.bootstrap(sg, Port(6881).get).flatMap(_.table)
+          for {
+            store <- PeerStore.inmemory()
+            dht   <- DHT.bootstrap(sg, Port(6881).get, store)
+            table <- dht.table
+          } yield table
+
         }
       }
 
@@ -78,9 +83,10 @@ class DHTSpec extends KSuite with TableFunctions {
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           for {
+            store <- PeerStore.inmemory()
             table <- loadTable(tableName)
             dht <- DHT
-              .fromTable(sg, Port(6881).get, table)
+              .fromTable(sg, Port(6881).get, table, store)
             res <- f(dht)
           } yield res
         }
