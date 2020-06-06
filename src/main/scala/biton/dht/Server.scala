@@ -11,16 +11,19 @@ import biton.dht.protocol.{
   Peer,
   RpcError,
   RpcErrorCode,
+  Secret,
   Token,
   Transaction
 }
 import biton.dht.types.{ Node, NodeId }
 import cats.effect.concurrent.Ref
-import cats.effect.{ Concurrent, ContextShift, IO, Timer }
+import cats.effect.{ Concurrent, ContextShift, Fiber, IO, Resource, Timer }
 import cats.syntax.apply._
 import cats.syntax.applicative._
 import cats.syntax.option._
 import cats.syntax.functor._
+import cats.syntax.eq._
+import cats.syntax.flatMap._
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.Stream
 import fs2.io.udp.SocketGroup
@@ -39,7 +42,7 @@ object Server {
       id: NodeId,
       table: TableState,
       store: PeerStore,
-      tokens: TokenCache,
+      secrets: Secrets,
       sg: SocketGroup,
       port: Port
   )(
@@ -56,7 +59,7 @@ object Server {
         ifValid: Token => IO[KMessage]
     ): IO[KMessage] = {
       for {
-        valid <- tokens.isValid(token)
+        valid <- secrets.isValid(token.secret)
         msg <- if (valid) ifValid(token)
         else
           RpcErrorMessage(t, RpcError(RpcErrorCode.`203`, "Invalid token")).pure
@@ -84,15 +87,18 @@ object Server {
 
               case (remote, KMessage.GetPeers(t, senderId, infohash)) =>
                 for {
-                  _     <- logger.debug("GetPeers")
-                  peers <- store.get(infohash)
-                  nodes <- table.neighbors(infohash)
+                  _       <- logger.debug("GetPeers")
+                  _       <- addNode(senderId, remote)
+                  peers   <- store.get(infohash)
+                  nodes   <- table.neighbors(infohash)
+                  secret  <- secrets.get
+                  contact <- IO.fromEither(remote.toContact)
                   _ <- s.write1(
                     remote,
                     NodesWithPeersResponse(
                       t,
                       id,
-                      Token.gen(),
+                      Token(contact.ip, secret),
                       nodes.some,
                       peers
                     )
@@ -158,26 +164,49 @@ object PeerStore {
     }
 }
 
-trait TokenCache {
-  def isValid(token: Token): IO[Boolean]
-  def put(token: Token): IO[Unit]
-  def purgeExpired: IO[Unit]
+trait Secrets {
+  def get: IO[Secret]
+  def isValid(secret: Secret): IO[Boolean]
 }
 
-object TokenCache {
-  def create(
-      expires: FiniteDuration
-  )(implicit timer: Timer[IO], clock: Clock): IO[TokenCache] =
-    MemCache.empty[String, Token](expires).map { cache =>
-      new TokenCache {
-        override def isValid(token: Token): IO[Boolean] =
-          cache.get(token.toHex).map(_.isDefined)
+object Secrets {
 
-        override def put(token: Token): IO[Unit] = {
-          cache.put(token.toHex, token)
+  def create(validTime: FiniteDuration)(
+      implicit timer: Timer[IO],
+      cs: ContextShift[IO],
+      con: Concurrent[IO]
+  ): Resource[IO, Secrets] = {
+    val secretsResRef = Ref[IO].of((Secret.gen, Secret.gen)).map { ref =>
+      case class SecretsRes(refreshFiber: Option[Fiber[IO, Unit]])
+          extends Secrets {
+        override def get: IO[Secret] = ref.get.map { case (sec1, _) => sec1 }
+
+        override def isValid(secret: Secret): IO[Boolean] =
+          ref.get.map {
+            case (sec1, sec2) => secret === sec1 || secret === sec2
+          }
+
+        def stop(): IO[Unit] =
+          refreshFiber.fold(IO(()))(_.cancel)
+
+        def start(): IO[SecretsRes] =
+          for {
+            f <- refresh().start
+          } yield SecretsRes(f.some)
+
+        def refresh(): IO[Unit] =
+          timer.sleep(validTime) >> update() >> refresh()
+
+        def update(): IO[Unit] = {
+          ref.modify {
+            case (_, sec2) =>
+              val result = (sec2, Secret.gen)
+              (result, result -> ())
+          }
         }
-
-        override def purgeExpired: IO[Unit] = cache.purgeExpired
       }
+      SecretsRes(None)
     }
+    Resource.make(secretsResRef.flatMap(_.start()))(_.stop())
+  }
 }

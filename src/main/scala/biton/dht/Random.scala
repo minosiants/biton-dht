@@ -35,4 +35,5 @@ object Random {
       .run(random)
       .foldLeft(BitVector.empty)((acc, v) => acc ++ BitVector.fromInt(v))
 
+  def `40bytes`: BitVector = `20bytes` ++ `20bytes`
 }
