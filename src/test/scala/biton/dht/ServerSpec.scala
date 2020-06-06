@@ -4,8 +4,8 @@ import cats.effect.{ Blocker, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2._
 import fs2.io.udp.SocketGroup
-import protocol.Peer
 import types.{ Contact, Node }
+import scala.concurrent.duration._
 
 class ServerSpec extends KSuite {
   val serverNode = (for {
@@ -20,12 +20,14 @@ class ServerSpec extends KSuite {
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           val s = for {
-            table <- TableState.empty(serverNode.nodeId)
-            store <- PeerStore.inmemory()
+            table  <- TableState.empty(serverNode.nodeId)
+            store  <- PeerStore.inmemory()
+            tokens <- TokenCache.create(1.minute)
             server = Server(
               serverNode.nodeId,
               table,
               store,
+              tokens,
               sg,
               serverNode.contact.port
             )

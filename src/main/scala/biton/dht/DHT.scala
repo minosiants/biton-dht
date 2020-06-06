@@ -48,7 +48,8 @@ object DHT {
     for {
       tableState <- TableState.create(table)
       cache      <- NodeInfoCache.create(10.minutes)
-      server = Server(table.nodeId, tableState, store, sg, port)
+      tokens     <- TokenCache.create(10.minutes)
+      server = Server(table.nodeId, tableState, store, tokens, sg, port)
     } yield DHTDef(table.nodeId, tableState, cache, client, server)
   }
 
@@ -69,7 +70,8 @@ object DHT {
     for {
       tableState <- TableState.empty(nodeId)
       cache      <- NodeInfoCache.create(10.minutes)
-      server = Server(nodeId, tableState, store, sg, port)
+      tokens     <- TokenCache.create(10.minutes)
+      server = Server(nodeId, tableState, store, tokens, sg, port)
       _nodes <- nodes
       dht    <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
     } yield dht

@@ -79,11 +79,16 @@ object protocol {
       BCodec.bitVectorBCodec.xmap(InfoHash(_), _.value)
   }
 
-  @newtype final case class Token(value: BitVector)
+  @newtype final case class Token(value: BitVector) {
+    def toHex: String = value.toHex
+  }
+
+  @newtype final case class Secret(value: BitVector)
 
   object Token {
     //
-    def gen(): Token = Token(Random.shortBinStr)
+    def gen(): Token    = Token(Random.shortBinStr)
+    def create(): Token = Token(Random.shortBinStr)
 
     implicit val codec: BCodec[Token] =
       BCodec.bitVectorBCodec.xmap(Token(_), _.value)
