@@ -21,5 +21,5 @@ class SecretsSpec extends KSuite {
       } yield s1 =!= s2
     }
   }
- 
+
 }

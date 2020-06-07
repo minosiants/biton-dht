@@ -21,7 +21,7 @@ lazy val root = (project in file("."))
     scalaVersion := "2.13.1",
     scalacOptions ++= Seq(
       "-Ymacro-annotations",
-      //"-Ywarn-unused",
+      "-Ywarn-unused",
       "-Yrangepos"),
     libraryDependencies ++= Seq(
       "org.typelevel"     %% "cats-core"        % catsVersion,
@@ -37,7 +37,6 @@ lazy val root = (project in file("."))
       "io.chrisdavenport" %% "log4cats-core"    % log4catsVersion,
       "io.chrisdavenport" %% "log4cats-slf4j"   % log4catsVersion,
       "ch.qos.logback"    % "logback-classic"   % logbackVersion,
-      "io.suzaku"         %% "boopickle"        % boopickleVersion,
       "org.scalacheck"    %% "scalacheck"       % scalacheckVersion % Test,
       "io.chrisdavenport" %% "cats-scalacheck"  % catsScalacheckVersion % Test,
       "org.scalameta"     %% "munit-scalacheck" % munitVersion % Test,
