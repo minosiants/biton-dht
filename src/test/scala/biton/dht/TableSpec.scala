@@ -7,8 +7,8 @@ import org.scalacheck.Prop.forAll
 class TableSpec extends KSuite with TableFunctions {
 
   val ksize = KSize(3)
-  val from  = Prefix(0)
-  val to    = Prefix(10)
+  val from = Prefix(0)
+  val to = Prefix(10)
 
   def kbGen(from: Int = 0, to: Int = 10) =
     kbucketGen(Prefix(from), Prefix(to), ksize, ksize.value)
@@ -16,11 +16,11 @@ class TableSpec extends KSuite with TableFunctions {
   test("add to empty table") {
     forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
       val result = for {
-        table  <- Table.empty(nodeId, ksize, from, to)
+        table <- Table.empty(nodeId, ksize, from, to)
         result <- table.addNodes(kbucket.nodes.value)
       } yield result
 
-      lazy val actual   = result.toOption.get.kbuckets.head.nodes.value
+      lazy val actual = result.toOption.get.kbuckets.head.nodes.value
       lazy val expected = kbucket.nodes.value
       result.map(_.bsize) == 1.asRight && expected === actual
     }
@@ -32,7 +32,7 @@ class TableSpec extends KSuite with TableFunctions {
       val result = for {
         t1 <- Table.empty(nodeId, ksize, from, to)
         t2 <- t1.addNodes(kbucket.nodes.value)
-        id   = availableIds(kbucket).head
+        id = availableIds(kbucket).head
         node = kbucket.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
         t3 <- t2.addNode(node)
       } yield t3
@@ -66,12 +66,11 @@ class TableSpec extends KSuite with TableFunctions {
       (kb1, kb2, nodeId) =>
         val result = for {
           t1 <- Table.empty(nodeId, ksize, from, Prefix(20))
-          t2 <- t1.addNodes(kb2.nodes.value)
-          t3 <- t2.addNodes(kb1.nodes.value)
-          id   = availableIds(t3.kbuckets.head).head
+          t2 <- t1.addNodes(kb2.nodes.value ++ kb1.nodes.value)
+          id = availableIds(t2.kbuckets.head).head
           node = kb1.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
-          t4 <- t3.addNode(node)
-        } yield t4
+          t3 <- t2.addNode(node)
+        } yield t3
 
         result.leftMap {
           case e: Error => println(e.show)
@@ -81,4 +80,20 @@ class TableSpec extends KSuite with TableFunctions {
     }
   }
 
+  test("neighbors".only) {
+    forAll(kbGen(), kbGen(10, 20), nodeIdChooseGen(11, 19), nodeIdChooseGen(0, 19)) {
+      (kb1, kb2, nodeId, target) =>
+        val result = for {
+          t1 <- Table.empty(nodeId, ksize, from, Prefix(20))
+          t2 <- t1.addNodes(kb2.nodes.value ++ kb1.nodes.value)
+          id = availableIds(t2.kbuckets.head).head
+          node = kb1.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
+          t3 <- t2.addNode(node)
+          _ = println(t3.kbuckets.map(_.nodes.value.size).fold)
+        } yield t3.neighbors(target)
+
+      println(result.size)
+      result.map(_.size) == ksize.value.asRight[Error]
+    }
+  }
 }

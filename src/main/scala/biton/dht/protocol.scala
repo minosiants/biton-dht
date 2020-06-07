@@ -1,7 +1,6 @@
 package biton.dht
 
 import java.net.InetSocketAddress
-import java.nio.channels.InterruptedByTimeoutException
 
 import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
 import cats.effect.{ Concurrent, ContextShift, IO, Resource }
@@ -17,12 +16,10 @@ import cats.{ Eq, Show }
 import scodec.{ Attempt, Codec, DecodeResult, Err }
 import scodec.codecs._
 import cats.syntax.flatMap._
-import cats.syntax.eq._
-import fs2.{ Pure, Stream, hash }
+import fs2.{ Stream, hash }
 import fs2.concurrent.Queue
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
-import fs2.Chunk.Bytes
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 import scala.concurrent.duration._
