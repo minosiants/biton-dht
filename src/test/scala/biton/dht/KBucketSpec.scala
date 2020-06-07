@@ -62,7 +62,6 @@ class KBucketSpec extends KSuite {
   }
   test("split kbucket") {
     forAll(kbGen(ksize), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
-      println(kbucket)
       val result = for {
         (first, second) <- kbucket.split()
       } yield checkBuckets(first, second)
@@ -72,7 +71,6 @@ class KBucketSpec extends KSuite {
   }
   test("inRange") {
     forAll(kbGen(ksize), nodeGen(nodeIdChooseGen(5, 9))) { (kbucket, node) =>
-      println(kbucket)
       val result = for {
         (_, second) <- kbucket.split()
       } yield second.inRange(node.nodeId)
