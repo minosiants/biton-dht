@@ -5,8 +5,8 @@
 
 
 ### Features
-- `BitTorrent DHT` - [BEP5](http://bittorrent.org/beps/bep_0005.html)
-_ `libtorrent` - [libtorrent.org](http://www.libtorrent.org/dht_extensions.html) Extended `get_peers` response<br> Forward compatibility<br> Client identification
+- `BitTorrent DHT` - [BEP5](http://bittorrent.org/beps/bep_0005.html).
+- `libtorrent` - [libtorrent.org](http://www.libtorrent.org/dht_extensions.html) Extended `get_peers` response.
 - `Metadata exchange` - [BEP9](http://bittorrent.org/beps/bep_0009.html) - TODO
 - `IPv6` - [BEP32](http://bittorrent.org/beps/bep_0032.html) - TODO
 - `Scrapes` - [BEP33](http://bittorrent.org/beps/bep_0033.html) - TODO
