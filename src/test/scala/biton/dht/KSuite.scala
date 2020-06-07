@@ -117,5 +117,4 @@ trait KGens {
 
   val nodeInfoListGen: Gen[List[NodeInfo]] = Gen.listOf(nodeInfoGen)
 
-
 }

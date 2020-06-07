@@ -127,8 +127,6 @@ final case class KTable(
 
   override def neighbors(nodeId: NodeId): List[Node] = {
     assert(kbuckets.nonEmpty)
-    type Indexed = (KBucket, Int)
-
     def go(
         left: Vector[KBucket],
         right: Vector[KBucket],
@@ -136,7 +134,6 @@ final case class KTable(
         isLeft: Boolean
     ): Stream[Pure, Node] = {
       (left, right, current) match {
-        case (_, _, FullBucket(_, _, nodes, _, _)) => Stream.emits(nodes.value)
         case (IndexedSeq(), IndexedSeq(), bucket) =>
           Stream.emits(bucket.nodes.value)
         case (x +: tail, r, bucket) if isLeft =>
