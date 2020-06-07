@@ -1,7 +1,6 @@
 package biton.dht
 
 import java.net.InetSocketAddress
-import java.time.Clock
 
 import biton.dht.protocol.KMessage._
 import biton.dht.protocol.{

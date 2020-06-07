@@ -1,6 +1,5 @@
 package biton.dht
 
-import java.lang
 import java.time.{ Clock, LocalDateTime }
 
 import biton.dht.KBucket._

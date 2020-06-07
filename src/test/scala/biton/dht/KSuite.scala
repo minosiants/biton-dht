@@ -116,4 +116,6 @@ trait KGens {
   } yield NodeInfo(token, node)
 
   val nodeInfoListGen: Gen[List[NodeInfo]] = Gen.listOf(nodeInfoGen)
+
+
 }
