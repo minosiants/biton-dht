@@ -15,6 +15,8 @@ import cats.syntax.either._
 import cats.syntax.eq._
 import cats.syntax.foldable._
 import cats.syntax.show._
+import fs2.Pure
+import fs2.Stream
 
 import scala.annotation.tailrec
 
@@ -126,7 +128,37 @@ final case class KTable(
 
   override def neighbors(nodeId: NodeId): List[Node] = {
     assert(kbuckets.nonEmpty)
-    kbuckets.filter(_.inRange(nodeId)).head.nodes.value
+    type Indexed = (KBucket, Int)
+
+    def go(
+        left: Vector[KBucket],
+        right: Vector[KBucket],
+        current: KBucket,
+        isLeft: Boolean
+    ): Stream[Pure, Node] = {
+      (left, right, current) match {
+        case (_, _, FullBucket(_, _, nodes, _, _)) => Stream.emits(nodes.value)
+        case (IndexedSeq(), IndexedSeq(), bucket) =>
+          Stream.emits(bucket.nodes.value)
+        case (x +: tail, r, bucket) if isLeft =>
+          Stream.emits(bucket.nodes.value) ++ go(tail, r, x, false)
+        case (l, x +: tail, bucket) if !isLeft =>
+          Stream.emits(bucket.nodes.value) ++ go(l, tail, x, true)
+        case (x +: tail, IndexedSeq(), bucket) =>
+          Stream.emits(bucket.nodes.value) ++ go(tail, Vector.empty, x, false)
+        case (IndexedSeq(), x +: tail, bucket) =>
+          Stream.emits(bucket.nodes.value) ++ go(Vector.empty, tail, x, false)
+      }
+    }
+    val indexed       = kbuckets.zipWithIndex
+    val (kb, i)       = indexed.filter { case (kb, _) => kb.inRange(nodeId) }.head
+    val (left, right) = kbuckets.toVector.splitAt(i)
+    go(left.reverse, right, kb, true)
+      .filter(_.nodeId =!= nodeId)
+      .take(kb.nodes.ksize.value)
+      .compile
+      .toList
+      .sortBy(_.nodeId.distance(nodeId))
   }
 
   override def markNodeAsBad(node: Node): Result[Table] = {
