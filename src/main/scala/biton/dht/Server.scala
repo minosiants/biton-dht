@@ -1,6 +1,7 @@
 package biton.dht
 
 import java.net.InetSocketAddress
+import java.time.Clock
 
 import biton.dht.protocol.KMessage._
 import biton.dht.protocol.{
@@ -14,7 +15,7 @@ import biton.dht.protocol.{
   Token,
   Transaction
 }
-import biton.dht.types.{ Node, NodeId }
+import biton.dht.types.{ LastActive, Node, NodeId }
 import cats.effect.concurrent.Ref
 import cats.effect.{ Concurrent, ContextShift, Fiber, IO, Resource, Timer }
 import cats.syntax.apply._
@@ -46,12 +47,13 @@ object Server {
       port: Port
   )(
       implicit c: Concurrent[IO],
-      cs: ContextShift[IO]
+      cs: ContextShift[IO],
+      clock: Clock
   ): Server = new Server() {
 
     def addNode(nodeId: NodeId, remote: InetSocketAddress): IO[Unit] = {
       remote.toContact
-        .map(Node(nodeId, _))
+        .map(Node(nodeId, _, LastActive.now))
         .fold(_ => IO(()), table.addNode(_).void)
     }
     def validateToken(token: Token, ipAddress: IpAddress, t: Transaction)(

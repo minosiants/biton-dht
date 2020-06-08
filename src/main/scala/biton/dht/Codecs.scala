@@ -1,11 +1,11 @@
 package biton.dht
 
-import benc.{ BCodec, BencError }
-import com.comcast.ip4s.{ IpAddress, Port }
+import benc.{BCodec, BencError}
+import cats.syntax.either._
+import com.comcast.ip4s.{IpAddress, Port}
 import scodec.bits.ByteVector
 import scodec.codecs._
-import scodec.{ Attempt, Codec, Err }
-import cats.syntax.either._
+import scodec.{Attempt, Codec, Err}
 
 trait Codecs {
 
@@ -26,5 +26,4 @@ trait Codecs {
       ),
     ip => Attempt.successful(ByteVector(ip.toBytes))
   )
-
 }

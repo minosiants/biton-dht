@@ -47,20 +47,6 @@ class DHTSpec extends KSuite with TableFunctions {
       s"${nodeId.value.toHex}.kad"
     }
 
-    def objectOutputStream(path: Path): Resource[IO, ObjectOutputStream] = {
-      Resource.make {
-        IO {
-          val fileOutputStream = new FileOutputStream(path.toString)
-          new ObjectOutputStream(fileOutputStream)
-        }
-      } { o =>
-        IO {
-          o.flush()
-          o.close()
-        }
-      }
-    }
-
     val res = (for {
       table <- bs
       _     <- saveTable(table)

@@ -16,8 +16,9 @@ import scodec.bits.BitVector
 
 import scala.concurrent.ExecutionContext
 
-class KSuite extends ScalaCheckSuite with KGens {
+class KSuite extends ScalaCheckSuite with KGens
 
+trait KImplicits {
   implicit val clock: Clock                      = Clock.fixed(Instant.now(), ZoneOffset.UTC)
   private val executionContext: ExecutionContext = ExecutionContext.global
 
@@ -28,17 +29,17 @@ class KSuite extends ScalaCheckSuite with KGens {
 
 }
 
-trait KGens {
+trait KGens extends KImplicits {
   val nodeIdIntGen: Gen[NodeId] =
     Gen.chooseNum(0, Integer.MAX_VALUE).map(NodeId.fromInt)
 
   def bitVectorGen(size: Int = idLength): Gen[BitVector] =
     Gen
       .infiniteStream(Gen.chooseNum(0, 255))
-      .map(_.take(20).toList.map(_.toByte))
+      .map(_.take(size).toList.map(_.toByte))
       .map(BitVector(_))
 
-  val nodeIdCharGen: Gen[NodeId] = bitVectorGen(idLength).map(NodeId((_)))
+  val nodeIdCharGen: Gen[NodeId] = bitVectorGen(20).map(NodeId((_)))
 
   val byteGen: Gen[Byte] = Gen.chooseNum(0, 255).map(_.byteValue())
 
@@ -64,7 +65,7 @@ trait KGens {
     for {
       id      <- nodeIdGen
       contact <- contactGen
-    } yield Node(id, contact)
+    } yield Node(id, contact, LastActive.now)
 
   def listOfNodesGen(
       size: Int,
@@ -75,7 +76,7 @@ trait KGens {
         .infiniteStream(nodeIdGen)
         .map(_.take(size * 30).distinct.take(size).toList)
         .retryUntil(_.size == size)
-      res <- list.traverse(v => contactGen.map(Node(v, _)))
+      res <- list.traverse(v => contactGen.map(Node(v, _, LastActive.now)))
     } yield res
 
   def nodeIdChooseGen(from: Int, to: Int): Gen[NodeId] =
@@ -86,7 +87,7 @@ trait KGens {
       to: Prefix,
       ksize: KSize,
       nsize: Int
-  )(implicit c: Clock): Gen[KBucket] =
+  ): Gen[KBucket] =
     for {
       nodes <- listOfNodesGen(
         nsize,

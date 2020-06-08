@@ -1,7 +1,5 @@
 package biton.dht
 
-import java.lang
-
 import types.KSize
 import org.scalacheck.Prop._
 import cats.implicits._
