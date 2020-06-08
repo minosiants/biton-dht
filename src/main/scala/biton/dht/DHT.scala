@@ -59,7 +59,7 @@ object DHT {
       store: PeerStore,
       secrets: Secrets,
       nodeId: NodeId = NodeId.gen(),
-      nodes: IO[List[Node]] = BootstrapNodes()
+      contacts: IO[List[Contact]] = BootstrapContacts()
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
@@ -72,7 +72,7 @@ object DHT {
       tableState <- TableState.empty(nodeId)
       cache      <- NodeInfoCache.create(10.minutes)
       server = Server(nodeId, tableState, store, secrets, sg, port)
-      _nodes <- nodes
+      _nodes <- contacts
       dht    <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
     } yield dht
   }
@@ -129,14 +129,25 @@ final case class DHTDef(
     server.start()
   }
 
-  def bootstrap(nodes: List[Node]): IO[DHTDef] = {
+  def bootstrap(contacts: List[Contact]): IO[DHTDef] = {
     for {
+      nodes    <- findFromContact(contacts)
       _nodes   <- findNodesFrom(nodes, 3)
       t2       <- tableState.addNodes(_nodes)
       newState <- TableState.create(t2)
     } yield DHTDef(nodeId, newState, cache, client, server)
   }
 
+  def findFromContact(contacts: List[Contact]): IO[List[Node]] = {
+    Stream
+      .emits(contacts)
+      .map(client.findNode(_, nodeId).mask)
+      .parJoin(contacts.size)
+      .flatMap(Stream.emits(_))
+      .compile
+      .toList
+
+  }
   def findNodesFrom(nodes: List[Node], count: Int): IO[List[Node]] = {
     def find =
       Stream
@@ -168,15 +179,15 @@ final case class DHTDef(
   }
 }
 
-final case class BootstrapNodes(contacts: (Hostname, Port)*) {
-  def bootstrapNode(
+final case class BootstrapContacts(contactInfo: (Hostname, Port)*) {
+  def bootstrapContact(
       hostname: Hostname,
       port: Port = Port(6881).get
-  ): IO[Node] = {
+  ): IO[Contact] = {
     hostname.resolve
       .map(
         _.map(
-          ip => Node(NodeId.fromString(hostname.toString), Contact(ip, port))
+          ip => Contact(ip, port)
         )
       )
       .flatMap(
@@ -186,21 +197,21 @@ final case class BootstrapNodes(contacts: (Hostname, Port)*) {
           )
       )
   }
-  def nodes: IO[List[Node]] = contacts.toList.traverse {
+  def contacts: IO[List[Contact]] = contactInfo.toList.traverse {
     case (host, port) =>
-      bootstrapNode(host, port)
+      bootstrapContact(host, port)
   }
 }
 
-object BootstrapNodes {
+object BootstrapContacts {
   val port           = Port(6881).get
   val transmissionbt = host"dht.transmissionbt.com" -> port
   val bittorrent     = host"router.bittorrent.com" -> port
   val utorrent       = host"router.utorrent.com" -> port
   val silotis        = host"router.silotis.us" -> port
 
-  def apply(): IO[List[Node]] =
-    BootstrapNodes(transmissionbt, bittorrent, utorrent, silotis).nodes
+  def apply(): IO[List[Contact]] =
+    BootstrapContacts(transmissionbt, bittorrent, utorrent, silotis).contacts
 }
 
 trait TableState {
@@ -320,7 +331,7 @@ final case class FindPeers(
               Stream
                 .eval_(cache.put(infoHash, t.topResponded(8))) ++
                 Stream.emits(responded.flatMap(_.peers))
-            case t @ TraversalTable.InProgress(_, nodes, _) =>
+            case t @ TraversalTable.InProgress(_, _, _) =>
               // Stream.eval_(logger.error(s"!!! InProgress")).drain ++
               // Stream.eval_(logger.error(TraversalTable.log(nodes))).drain ++
               Stream.emits(responded.flatMap(_.peers)) ++

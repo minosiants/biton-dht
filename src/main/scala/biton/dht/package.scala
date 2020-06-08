@@ -4,8 +4,10 @@ import biton.dht.syntax.Syntax
 import cats.Order
 import cats.instances.either._
 import cats.instances.list._
+import cats.kernel.Eq
 import cats.syntax.either._
 import cats.syntax.foldable._
+import com.comcast.ip4s.{ IpAddress, Port }
 import scodec.bits.{ BitVector, ByteVector }
 
 import scala.Function.const
@@ -29,4 +31,10 @@ package object dht extends Codecs with Syntax {
         }
       result.fold(identity, const(0))
   }
+
+  implicit val eqBitVector: Eq[BitVector] = Eq.instance { (a, b) =>
+    a === b
+  }
+  implicit val eqPort: Eq[Port]           = Eq.instance(_.equals(_))
+  implicit val eqIpAddress: Eq[IpAddress] = Eq.instance(_.equals(_))
 }

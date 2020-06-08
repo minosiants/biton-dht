@@ -1,5 +1,7 @@
 package biton.dht
 
+import java.time.{ Clock, LocalDateTime }
+
 import benc.{ BDecoder, BEncoder }
 import biton.dht.protocol.Token
 import cats.implicits._
@@ -7,7 +9,7 @@ import cats.{ Eq, Order }
 import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
 import protocol.Token
-import scodec.Codec
+import scodec.{ Attempt, Codec, DecodeResult }
 import scodec.bits.BitVector
 import scodec.codecs._
 
@@ -49,9 +51,24 @@ object types {
     ).as[Contact]
 
   }
+  @newtype final case class LastActive(value: LocalDateTime)
+
+  object LastActive {
+    def now(implicit clock: Clock): LastActive =
+      LastActive(LocalDateTime.now(clock))
+
+    lazy val codec: Codec[LastActive] = Codec[LastActive](
+      (_: LastActive) => Attempt.successful(BitVector.empty),
+      bits =>
+        Attempt.successful(DecodeResult(LastActive(LocalDateTime.now), bits))
+    )
+
+  }
+
   final case class Node(
       nodeId: NodeId,
-      contact: Contact
+      contact: Contact,
+      lastActive: LastActive
   ) extends Product
       with Serializable
 
@@ -61,13 +78,13 @@ object types {
       a.nodeId === b.nodeId && a.contact === b.contact
     }
 
-    val nodeCodec: Codec[Node] =
-      (NodeId.codec :: Contact.codec).as[Node]
+    lazy val nodeCodec: Codec[Node] =
+      (NodeId.codec :: Contact.codec :: LastActive.codec).as[Node]
 
-    val listNodeCodec = list(nodeCodec)
-    implicit val bencoder: BEncoder[List[Node]] =
+    lazy val listNodeCodec = list(nodeCodec)
+    implicit def bencoder: BEncoder[List[Node]] =
       BEncoder.sc[List[Node]](listNodeCodec)
-    implicit val bdecoder: BDecoder[List[Node]] =
+    implicit def bdecoder: BDecoder[List[Node]] =
       BDecoder.sc[List[Node]](listNodeCodec)
 
   }
@@ -108,9 +125,9 @@ object types {
       _.value
     )
 
-    implicit val nodeIdBencoder: BEncoder[NodeId] =
+    implicit lazy val nodeIdBencoder: BEncoder[NodeId] =
       BEncoder.bitVectorBEncoder.contramap(_.value)
-    implicit val nodeIdBDecoder: BDecoder[NodeId] =
+    implicit lazy val nodeIdBDecoder: BDecoder[NodeId] =
       BDecoder.bitVectorBDecoder.map(NodeId(_))
 
     implicit val eqNodeId: Eq[NodeId] = Eq.instance(_.value === _.value)

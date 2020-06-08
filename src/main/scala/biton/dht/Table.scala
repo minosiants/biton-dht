@@ -250,7 +250,7 @@ sealed abstract class TraversalTable {
   def topResponded(n: Int): List[NodeInfo] =
     nodes
       .collect {
-        case r @ Responded(_, info, _) => info
+        case Responded(_, info, _) => info
       }
       .take(n)
 

@@ -4,7 +4,8 @@ import cats.effect.{ Blocker, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2._
 import fs2.io.udp.SocketGroup
-import types.{ Contact, Node }
+import types.{ Contact, LastActive, Node }
+
 import scala.concurrent.duration._
 
 class ServerSpec extends KSuite {
@@ -12,7 +13,7 @@ class ServerSpec extends KSuite {
     id   <- nodeIdCharGen.sample
     ip   <- IpAddress("127.0.0.1")
     port <- Port(2222)
-  } yield Node(id, Contact(ip, port))).get
+  } yield Node(id, Contact(ip, port), LastActive.now)).get
 
   val clientNodeId = nodeIdCharGen.sample.get
   def sendToServer[A](f: Client => Stream[IO, A]): IO[A] =

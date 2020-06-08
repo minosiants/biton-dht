@@ -2,28 +2,29 @@ package biton.dht
 
 import java.net.InetSocketAddress
 
-import benc.{ BCodec, BDecoder, BEncoder, BType, BencError }
+import benc.{ BCodec, BDecoder, BEncoder, BType, BencError, _ }
+import biton.dht.types._
 import cats.effect.{ Concurrent, ContextShift, IO, Resource }
-import com.comcast.ip4s.{ IpAddress, Port }
-import fs2.io.udp.{ Packet, Socket, SocketGroup }
-import io.estatico.newtype.macros.newtype
-import types._
-import scodec.bits.BitVector
-import cats.syntax.either._
 import cats.instances.either._
-import benc._
-import cats.{ Eq, Show }
-import scodec.{ Attempt, Codec, DecodeResult, Err }
-import scodec.codecs._
+import cats.instances.list._
+import cats.instances.option._
+import cats.syntax.either._
+import cats.syntax.eq._
 import cats.syntax.flatMap._
-import fs2.{ Stream, hash }
-import fs2.concurrent.Queue
-import scodec.stream.{ StreamDecoder, StreamEncoder }
 import cats.syntax.show._
+import cats.{ Eq, Show }
+import com.comcast.ip4s.{ IpAddress, Port }
+import fs2.concurrent.Queue
+import fs2.io.udp.{ Packet, Socket, SocketGroup }
+import fs2.{ Stream, hash }
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.estatico.newtype.macros.newtype
+import scodec.bits.BitVector
+import scodec.codecs._
+import scodec.stream.{ StreamDecoder, StreamEncoder }
+import scodec.{ Attempt, Codec, DecodeResult, Err }
 
 import scala.concurrent.duration._
-import scodec.bits._
 
 object protocol {
 
@@ -54,17 +55,18 @@ object protocol {
     implicit val eqRpcError: Eq[RpcError]     = Eq.fromUniversalEquals
     implicit val showRpcError: Show[RpcError] = Show.fromToString
 
-    implicit val bdecoder: BDecoder[RpcError] = for {
+    implicit lazy val bdecoder: BDecoder[RpcError] = for {
       code <- BDecoder.at[RpcErrorCode](0)
       msg  <- BDecoder.at[String](1)
     } yield RpcError(code, msg)
 
-    implicit val bencoder: BEncoder[RpcError] = BEncoder.instance[RpcError](
-      v =>
-        BType
-          .list(BType.int(v.code.code), BType.string(v.msg))
-          .asRight
-    )
+    implicit lazy val bencoder: BEncoder[RpcError] =
+      BEncoder.instance[RpcError](
+        v =>
+          BType
+            .list(BType.int(v.code.code), BType.string(v.msg))
+            .asRight
+      )
 
   }
   @newtype final case class InfoHash(value: BitVector) {
@@ -72,8 +74,10 @@ object protocol {
   }
 
   object InfoHash {
-    implicit val codec: BCodec[InfoHash] =
+    implicit lazy val codec: BCodec[InfoHash] =
       BCodec.bitVectorBCodec.xmap(InfoHash(_), _.value)
+
+    implicit val eqInfoHash: Eq[InfoHash] = Eq.instance(_.value === _.value)
   }
 
   @newtype final case class Secret(value: BitVector)
@@ -102,7 +106,7 @@ object protocol {
       Token(BitVector(hashed))
     }
 
-    implicit val bcodec: BCodec[Token] =
+    implicit lazy val bcodec: BCodec[Token] =
       BCodec.bitVectorBCodec.xmap(Token(_), _.value)
 
     implicit val eqToken: Eq[Token] =
@@ -118,10 +122,11 @@ object protocol {
         ("port" | portScodec)
     ).as[Peer]
 
-    implicit val bdecoder: BDecoder[Peer] = BDecoder.sc[Peer]
-    implicit val bencoder: BEncoder[Peer] = BEncoder.sc[Peer]
+    implicit lazy val bdecoder: BDecoder[Peer] = BDecoder.sc[Peer]
+    implicit lazy val bencoder: BEncoder[Peer] = BEncoder.sc[Peer]
 
-    implicit val eqPeer: Eq[Peer] = Eq.fromUniversalEquals
+    implicit val eqPeer: Eq[Peer] =
+      Eq.instance((a, b) => a.ip === b.ip && a.port === b.port)
   }
 
   @newtype final case class Transaction(value: BitVector)
@@ -131,11 +136,13 @@ object protocol {
       Transaction(Random.`2chars`)
     }
 
-    implicit val eqTransaction: Eq[Transaction] = Eq.fromUniversalEquals
+    implicit val eqTransaction: Eq[Transaction] = Eq.instance { (a, b) =>
+      a.value === b.value
+    }
 
-    implicit val bencoder: BEncoder[Transaction] =
+    implicit lazy val bencoder: BEncoder[Transaction] =
       BEncoder.bitVectorBEncoder.contramap(_.value)
-    implicit val bdecoder: BDecoder[Transaction] =
+    implicit lazy val bdecoder: BDecoder[Transaction] =
       BDecoder.bitVectorBDecoder.map(Transaction(_))
   }
 
@@ -152,7 +159,17 @@ object protocol {
     def getRField[A: BDecoder](name: String): BDecoder[A] =
       getField[A]("r")(name)
 
-    implicit val eqKmessage: Eq[KMessage]     = Eq.fromUniversalEquals
+    implicit val eqKmessage: Eq[KMessage] = Eq.instance {
+      case (a: Ping, b: Ping)                                     => a === b
+      case (a: FindNode, b: FindNode)                             => a === b
+      case (a: GetPeers, b: GetPeers)                             => a === b
+      case (a: AnnouncePeer, b: AnnouncePeer)                     => a === b
+      case (a: RpcErrorMessage, b: RpcErrorMessage)               => a === b
+      case (a: NodeIdResponse, b: NodeIdResponse)                 => a === b
+      case (a: FindNodeResponse, b: FindNodeResponse)             => a === b
+      case (a: NodesWithPeersResponse, b: NodesWithPeersResponse) => a === b
+      case (_, _)                                                 => false
+    }
     implicit val showKmessage: Show[KMessage] = Show.fromToString
 
     implicit val fieldName: FieldName = FieldName.snakeCaseFieldName
@@ -160,29 +177,32 @@ object protocol {
     final case class Ping(t: Transaction, id: NodeId) extends KMessage
 
     object Ping {
-      implicit val bencoder: BEncoder[Ping] = BCodec[Ping]
+      implicit lazy val bencoder: BEncoder[Ping] = BCodec[Ping]
 
-      implicit val bdecoder: BDecoder[Ping] = for {
+      implicit lazy val bdecoder: BDecoder[Ping] = for {
         t      <- BDecoder.at[Transaction]("t")
         nodeId <- getAField[NodeId]("id")
       } yield Ping(t, nodeId)
 
-      implicit val eqPing: Eq[Ping] = Eq.fromUniversalEquals
+      implicit val eqPing: Eq[Ping] =
+        Eq.instance((a, b) => a.t === b.t && a.id === b.id)
     }
 
     final case class FindNode(t: Transaction, id: NodeId, target: NodeId)
         extends KMessage
 
     object FindNode {
-      implicit val bencoder: BEncoder[FindNode] = BCodec[FindNode]
+      implicit lazy val bencoder: BEncoder[FindNode] = BCodec[FindNode]
 
-      implicit val bdecoder: BDecoder[FindNode] = for {
+      implicit lazy val bdecoder: BDecoder[FindNode] = for {
         t      <- BDecoder.at[Transaction]("t")
         id     <- getAField[NodeId]("id")
         target <- getAField[NodeId]("target")
       } yield FindNode(t, id, target)
 
-      implicit val eqFindNode: Eq[FindNode] = Eq.fromUniversalEquals
+      implicit val eqFindNode: Eq[FindNode] = Eq.instance(
+        (a, b) => a.t === b.t && a.id === b.id && a.target === b.target
+      )
     }
 
     final case class GetPeers(
@@ -192,14 +212,16 @@ object protocol {
     ) extends KMessage
 
     object GetPeers {
-      implicit val bencoder: BEncoder[GetPeers] = BCodec[GetPeers]
-      implicit val bdecoder: BDecoder[GetPeers] = for {
+      implicit lazy val bencoder: BEncoder[GetPeers] = BCodec[GetPeers]
+      implicit lazy val bdecoder: BDecoder[GetPeers] = for {
         t        <- BDecoder.at[Transaction]("t")
         id       <- getAField[NodeId]("id")
         infoHash <- getAField[InfoHash]("info_hash")
       } yield GetPeers(t, id, infoHash)
 
-      implicit val eqGetPeers: Eq[GetPeers] = Eq.fromUniversalEquals
+      implicit val eqGetPeers: Eq[GetPeers] = Eq.instance(
+        (a, b) => a.t === b.t && a.id === b.id && a.infoHash === b.infoHash
+      )
     }
 
     @newtype final case class ImpliedPort(value: Boolean) {
@@ -211,10 +233,12 @@ object protocol {
           ifFalse
     }
     object ImpliedPort {
-      implicit val bcodec: BCodec[ImpliedPort] = BCodec.intBCodec.xmap(
+      implicit lazy val bcodec: BCodec[ImpliedPort] = BCodec.intBCodec.xmap(
         i => ImpliedPort(i > 0),
         a => if (a.value) 1 else 0
       )
+      implicit val eqImpliedPort: Eq[ImpliedPort] =
+        Eq.instance(_.value == _.value)
     }
     final case class AnnouncePeer(
         t: Transaction,
@@ -226,8 +250,8 @@ object protocol {
     ) extends KMessage
 
     object AnnouncePeer {
-      implicit val bencoder: BEncoder[AnnouncePeer] = BCodec[AnnouncePeer]
-      implicit val bdecoder: BDecoder[AnnouncePeer] = for {
+      implicit lazy val bencoder: BEncoder[AnnouncePeer] = BCodec[AnnouncePeer]
+      implicit lazy val bdecoder: BDecoder[AnnouncePeer] = for {
         t           <- BDecoder.at[Transaction]("t")
         impliedPort <- getAField[ImpliedPort]("implied_port")
         id          <- getAField[NodeId]("id")
@@ -236,7 +260,11 @@ object protocol {
         token       <- getAField[Token]("token")
       } yield AnnouncePeer(t, impliedPort, id, infoHash, port, token)
 
-      implicit val eqAnnouncePeer: Eq[AnnouncePeer] = Eq.fromUniversalEquals
+      implicit val eqAnnouncePeer: Eq[AnnouncePeer] =
+        Eq.instance(
+          (a, b) =>
+            a.t === b.t && a.impliedPort === b.impliedPort && a.id === b.id && a.infoHash === b.infoHash && a.port === b.port && a.token === b.token
+        )
     }
 
     final case class RpcErrorMessage(
@@ -246,27 +274,29 @@ object protocol {
 
     object RpcErrorMessage {
 
-      implicit val bdecoder: BDecoder[RpcErrorMessage] =
+      implicit lazy val bdecoder: BDecoder[RpcErrorMessage] =
         BCodec[RpcErrorMessage]
-      implicit val bencoder: BEncoder[RpcErrorMessage] =
+      implicit lazy val bencoder: BEncoder[RpcErrorMessage] =
         BCodec[RpcErrorMessage]
 
       implicit val eqRpcErrorMessage: Eq[RpcErrorMessage] =
-        Eq.fromUniversalEquals
+        Eq.instance((a, b) => a.t === b.t && a.e === b.e)
     }
 
     final case class NodeIdResponse(t: Transaction, id: NodeId) extends KMessage
 
     object NodeIdResponse {
-      implicit val bencoder: BEncoder[NodeIdResponse] =
+      implicit lazy val bencoder: BEncoder[NodeIdResponse] =
         BCodec[NodeIdResponse]
 
-      implicit val bdecoder: BDecoder[NodeIdResponse] = for {
+      implicit lazy val bdecoder: BDecoder[NodeIdResponse] = for {
         t  <- BDecoder.at[Transaction]("t")
         id <- getRField[NodeId]("id")
       } yield NodeIdResponse(t, id)
 
-      implicit val eqNodeIdResponse: Eq[NodeIdResponse] = Eq.fromUniversalEquals
+      implicit val eqNodeIdResponse: Eq[NodeIdResponse] = Eq.instance(
+        (a, b) => a.t === b.t && a.id === b.id
+      )
     }
 
     final case class FindNodeResponse(
@@ -276,16 +306,20 @@ object protocol {
     ) extends KMessage
 
     object FindNodeResponse {
-      implicit val bencoder: BEncoder[FindNodeResponse] =
+      implicit lazy val bencoder: BEncoder[FindNodeResponse] =
         BCodec[FindNodeResponse]
-      implicit val bdecoder: BDecoder[FindNodeResponse] = for {
+      implicit lazy val bdecoder: BDecoder[FindNodeResponse] = for {
         t     <- BDecoder.at[Transaction]("t")
         id    <- getRField[NodeId]("id")
         nodes <- getRField[List[Node]]("nodes")
       } yield FindNodeResponse(t, id, nodes)
 
       implicit val eqFindNodeResponse: Eq[FindNodeResponse] =
-        Eq.fromUniversalEquals
+        Eq.instance { (a, b) =>
+          a.t === b.t &&
+          a.id === b.id &&
+          a.nodes === b.nodes
+        }
     }
 
     final case class NodesWithPeersResponse(
@@ -298,10 +332,10 @@ object protocol {
 
     object NodesWithPeersResponse {
 
-      implicit val bencoder: BEncoder[NodesWithPeersResponse] =
+      implicit lazy val bencoder: BEncoder[NodesWithPeersResponse] =
         BCodec[NodesWithPeersResponse]
 
-      implicit val bdecoder: BDecoder[NodesWithPeersResponse] = for {
+      implicit lazy val bdecoder: BDecoder[NodesWithPeersResponse] = for {
         t     <- BDecoder.at[Transaction]("t")
         id    <- getRField[NodeId]("id")
         token <- getRField[Token]("token")
@@ -310,10 +344,13 @@ object protocol {
       } yield NodesWithPeersResponse(t, id, token, nodes, peers)
 
       implicit val eqNodesWithPeersResponse: Eq[NodesWithPeersResponse] =
-        Eq.fromUniversalEquals
+        Eq.instance(
+          (a, b) =>
+            a.t === b.t && a.id === b.id && a.token === b.token && a.values === b.values
+        )
     }
 
-    implicit val bdecoder: BDecoder[KMessage] = BDecoder.instance(
+    implicit lazy val bdecoder: BDecoder[KMessage] = BDecoder.instance(
       v =>
         v.get[String]("y").flatMap {
           case "q" =>
@@ -335,7 +372,7 @@ object protocol {
         }
     )
 
-    implicit val bencoder: BEncoder[KMessage] = {
+    implicit lazy val bencoder: BEncoder[KMessage] = {
 
       def query(qr: String, t: Transaction)(
           bt: BType

@@ -1,18 +1,16 @@
 package biton.dht
 
-import benc.{ BDecoder, BEncoder, Benc, FromBenc, ToBenc }
+import benc.{ BDecoder, BEncoder }
+import biton.dht.protocol.KMessage.{ NodesWithPeersResponse, _ }
+import biton.dht.protocol._
+import biton.dht.types.Node
 import cats.Eq
 import cats.instances.list._
 import cats.syntax.either._
-import protocol.KMessage.{ NodesWithPeersResponse, _ }
-import protocol._
-import types.Node
 import org.scalacheck.Prop._
 import org.scalacheck._
-import scodec.bits.BitVector
 
 class ProtocolEncodingSpec extends KSuite {
-
   property("Ping")(prop[Ping])
   property("FindNode")(prop[FindNode])
   property("GetPeers")(prop[GetPeers])
@@ -20,7 +18,7 @@ class ProtocolEncodingSpec extends KSuite {
   property("RpcErrorMessage")(prop[RpcErrorMessage])
   property("NodeIdResponse")(prop[NodeIdResponse])
   property("FindNodeResponse")(prop[FindNodeResponse])
-  property("GetPeersNodesResponse")(prop[NodesWithPeersResponse])
+  property("NodesWithPeersResponse")(prop[NodesWithPeersResponse])
   property("RpcError") {
     forAll(rpcErrorGen) { e =>
       val encoded = BEncoder[RpcError].encode(e)

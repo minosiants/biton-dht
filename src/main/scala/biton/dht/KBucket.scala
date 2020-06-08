@@ -120,8 +120,7 @@ sealed abstract class KBucket extends Product with Serializable {
           b <- KBucket.create(from, to, n, c)
         } yield b
 
-      case b @ KBucket.FullBucket(from, to, nodes, cache, _)
-          if nonNewNode(node) =>
+      case KBucket.FullBucket(from, to, nodes, cache, _) if nonNewNode(node) =>
         for {
           n <- nodes.filterNot(node).append(node)
           b <- KBucket.create(from, to, n, cache)
