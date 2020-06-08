@@ -146,15 +146,18 @@ final case class KTable(
           Stream.emits(bucket.nodes.value) ++ go(Vector.empty, tail, x, false)
       }
     }
-    val indexed       = kbuckets.zipWithIndex
-    val (kb, i)       = indexed.filter { case (kb, _) => kb.inRange(nodeId) }.head
-    val (left, right) = kbuckets.toVector.splitAt(i)
-    go(left.reverse, right, kb, true)
+
+    val result = for {
+      (kb, i) <- findBucketFor(nodeId)
+      (left, right) = kbuckets.toVector.splitAt(i.value)
+    } yield go(left.reverse, right, kb, true)
       .filter(_.nodeId =!= nodeId)
       .take(kb.nodes.ksize.value)
       .compile
       .toList
       .sortBy(_.nodeId.distance(nodeId))
+
+    result.fold(_ => List.empty, identity)
   }
 
   override def markNodeAsBad(node: Node): Result[Table] = {
