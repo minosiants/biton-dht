@@ -80,7 +80,7 @@ class TableSpec extends KSuite with TableFunctions {
     }
   }
 
-  test("neighbors".only) {
+  test("neighbors") {
     forAll(
       kbGen(),
       kbGen(10, 20),
