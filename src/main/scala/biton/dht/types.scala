@@ -11,7 +11,6 @@ import io.estatico.newtype.macros._
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.{ Attempt, Codec, DecodeResult }
-import cats.instances.int._
 import scala.concurrent.duration.FiniteDuration
 
 object types {

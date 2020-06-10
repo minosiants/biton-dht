@@ -20,6 +20,9 @@ object Random {
     def rshort: R[Short] = R(_.between(Short.MinValue, Short.MaxValue).toShort)
     def rlong: R[Long]   = R(_.nextLong())
     def rint: R[Int]     = R(_.nextInt())
+    def betweenInt(minInclusive: Int, maxExclusive: Int): R[Int] = R {
+      _.between(minInclusive, maxExclusive)
+    }
     def rshortBits: R[BitVector] =
       rshort.map(BitVector.fromShort(_))
     def rlongBits: R[BitVector]                 = rlong.map(BitVector.fromLong(_))
@@ -35,5 +38,7 @@ object Random {
       .run(random)
       .foldLeft(BitVector.empty)((acc, v) => acc ++ BitVector.fromInt(v))
 
-  def `40bytes`: BitVector = `20bytes` ++ `20bytes`
+  def `40bytes`: BitVector          = `20bytes` ++ `20bytes`
+  def rint(from: Int, to: Int): Int = R.betweenInt(from, to).run(random)
+  def rint(to: Int): Int            = rint(0, to: Int)
 }

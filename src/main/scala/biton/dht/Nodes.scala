@@ -2,10 +2,10 @@ package biton.dht
 
 import java.time.Clock
 
-import biton.dht.types.{ FailCount, GoodDuration, KSize, Node, NodeActivity }
+import biton.dht.types.{ KSize, Node, NodeActivity }
 import cats.Eq
-import cats.syntax.eq._
 import cats.instances.order._
+import cats.syntax.eq._
 
 import scala.annotation.tailrec
 final case class Nodes(value: Vector[NodeActivity], ksize: KSize)
@@ -15,10 +15,11 @@ final case class Nodes(value: Vector[NodeActivity], ksize: KSize)
   def filterNot(node: Node): Nodes =
     Nodes(value.filterNot(_.node.nodeId === node.nodeId), ksize)
 
+  def get(i: Int): NodeActivity = value(i)
   def bad: Vector[NodeActivity] =
     value.filter(_.count.value > 0).sortBy(_.count.inc)
 
-  def replace(node: Node, replacement: Node)(implicit clock: Clock): Nodes =
+  def swap(node: Node, replacement: Node)(implicit clock: Clock): Nodes =
     find(node).fold(this) {
       case (_, i) =>
         Nodes(value.updated(i, NodeActivity(replacement)), ksize)
