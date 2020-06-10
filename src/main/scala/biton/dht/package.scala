@@ -1,7 +1,7 @@
 package biton
 
 import biton.dht.syntax.Syntax
-import cats.Order
+import cats.{ Monoid, Order }
 import cats.instances.either._
 import cats.instances.list._
 import cats.kernel.Eq
@@ -37,4 +37,14 @@ package object dht extends Codecs with Syntax {
   }
   implicit val eqPort: Eq[Port]           = Eq.instance(_.equals(_))
   implicit val eqIpAddress: Eq[IpAddress] = Eq.instance(_.equals(_))
+
+  implicit def tupleMonoid[A, B]: Monoid[(List[A], List[B])] = Monoid.instance(
+    (List.empty[A], List.empty[B]),
+    (a, b) => {
+      val (a1, b1) = a
+      val (a2, b2) = b
+      (a1 ++ a2) -> (b1 ++ b2)
+    }
+  )
+
 }

@@ -7,7 +7,7 @@ import biton.dht.protocol.KMessage._
 import biton.dht.protocol._
 import biton.dht.types._
 import cats.Show
-import cats.effect.{ Concurrent, ContextShift, IO, Timer }
+import cats.effect.{ Concurrent, ContextShift, IO }
 import cats.implicits._
 import com.comcast.ip4s.Port
 import fs2.io.udp.SocketGroup
@@ -15,7 +15,6 @@ import fs2.{ RaiseThrowable, Stream }
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
 
 trait Client
     extends Client.Ping
@@ -56,8 +55,7 @@ object Client {
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
-      rt: RaiseThrowable[IO],
-      timer: Timer[IO]
+      rt: RaiseThrowable[IO]
   ) = {
 
     def remote(contact: Contact) =
@@ -95,11 +93,6 @@ object Client {
           pf orElse badResponse
         }
         .head
-        .attempts(Stream(1.second).repeatN(2))
-        .takeThrough(_.fold(NonFatal(_), _ => false))
-        .last
-        .map(_.get)
-        .rethrow
     }
 
     new Client() {

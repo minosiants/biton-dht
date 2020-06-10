@@ -335,10 +335,7 @@ final case class FindNodes(
               }
         )
         .parJoin(3)
-        .fold((List.empty[Node], List.empty[FindNodes.NodeResponse])) {
-          case ((ss, rr), (stale, responded)) =>
-            (ss ++ stale, rr ++ responded)
-        }
+        .foldMonoid
         .map {
           case (stale, responded) => (stale.distinct, responded.distinct)
         }
@@ -389,6 +386,7 @@ object FindNodes {
   )(implicit c: Concurrent[IO]): FindNodesStream =
     FindNodes(target, nodes, client, tableState, logger).findNodes
 }
+
 final case class FindPeers(
     nodes: List[Node],
     infoHash: InfoHash,
@@ -417,10 +415,7 @@ final case class FindPeers(
               }
         )
         .parJoin(3)
-        .fold((List.empty[Node], List.empty[NodeResponse])) {
-          case ((ss, rr), (stale, responded)) =>
-            (ss ++ stale, rr ++ responded)
-        }
+        .foldMonoid
         .map {
           case (stale, responded) => (stale.distinct, responded.distinct)
         }
