@@ -1,40 +1,53 @@
 package biton.dht
 
-import cats.Eq
-import types.{ KSize, Node }
+import java.time.Clock
 
-final case class Nodes(value: List[Node], ksize: KSize)
+import biton.dht.types.{ FailCount, GoodDuration, KSize, Node, NodeActivity }
+import cats.Eq
+import cats.syntax.eq._
+import cats.instances.order._
+
+import scala.annotation.tailrec
+final case class Nodes(value: Vector[NodeActivity], ksize: KSize)
     extends Product
     with Serializable {
 
   def filterNot(node: Node): Nodes =
-    Nodes(value.filterNot(_.nodeId.value == node.nodeId.value), ksize)
+    Nodes(value.filterNot(_.node.nodeId === node.nodeId), ksize)
 
-  def append(node: Node): Result[Nodes] = {
+  def bad: Vector[NodeActivity] =
+    value.filter(_.count.value > 0).sortBy(_.count.inc)
+
+  def replace(node: Node, replacement: Node)(implicit clock: Clock): Nodes =
+    find(node).fold(this) {
+      case (_, i) =>
+        Nodes(value.updated(i, NodeActivity(replacement)), ksize)
+    }
+
+  def find(node: Node): Option[(NodeActivity, Int)] =
+    value.zipWithIndex.find(_._1.node.nodeId === node.nodeId)
+
+  def failOne(node: Node): Nodes = find(node).fold(this) {
+    case (NodeActivity(node, lastActive, count), i) =>
+      Nodes(value.updated(i, NodeActivity(node, lastActive, count.inc)), ksize)
+  }
+
+  @tailrec
+  def fail(node: Node*): Nodes =
+    node match {
+      case Seq()   => this
+      case x :: xs => failOne(x).fail(xs: _*)
+    }
+
+  def append(node: Node)(implicit clock: Clock): Result[Nodes] = {
     Either.cond(
       nonFull,
-      Nodes(value :+ node, ksize),
+      Nodes(value :+ NodeActivity(node), ksize),
       Error.KBucketError(s"Bucket is full for Node $node")
     )
   }
 
-  def prepend(node: Node): Result[Nodes] = {
-    Either.cond(
-      nonFull,
-      Nodes(node :: value, ksize),
-      Error.KBucketError(s"Bucket is full for Node $node")
-    )
-  }
-
-  def dropAndPrepended(node: Node): Nodes = {
-    val list: List[Node] =
-      if (isFull)
-        value.dropRight(1).prepended(node)
-      else value.prepended(node)
-    Nodes(list, ksize)
-  }
-
-  def exists(node: Node): Boolean   = value.exists(_.nodeId == node.nodeId)
+  def exists(node: Node): Boolean   = value.exists(_.node.nodeId == node.nodeId)
   def nonExist(node: Node): Boolean = !exists(node)
   def isFull: Boolean               = value.size == ksize.value
   def nonFull: Boolean              = !isFull
