@@ -2,17 +2,24 @@ package biton.dht
 
 import java.time.Clock
 
-import biton.dht.KBucket.{ Cache, FullBucket }
+import biton.dht.Client.Ping
+import biton.dht.KBucket.FullBucket
 import biton.dht.TraversalNode.{ Fresh, Responded, Stale }
 import biton.dht.TraversalTable.{ Completed, InProgress }
 import biton.dht.protocol.InfoHash
 import biton.dht.types._
 import cats.Show
 import cats.data.NonEmptyVector
+import cats.effect.IO
 import cats.instances.int._
 import cats.syntax.either._
+import cats.syntax.bitraverse._
+import cats.syntax.bifoldable._
+import cats.instances.list._
+import cats.instances.either._
 import cats.syntax.eq._
 import cats.syntax.foldable._
+import cats.syntax.option._
 import cats.syntax.show._
 import fs2.Pure
 import fs2.Stream
@@ -24,8 +31,8 @@ trait Table extends Product with Serializable {
   def bsize: Long = kbuckets.size
   def size: Long  = kbuckets.map(_.nodes.value.size).fold
   def kbuckets: NonEmptyVector[KBucket]
-  def addNode(node: Node): Result[Table]
-  def addNodes(nodes: List[Node]): Result[Table]
+  def addNode(node: Node): IO[Table]
+  def addNodes(nodes: List[Node]): IO[Table]
   def neighbors(nodeId: NodeId): List[Node]
   def markNodeAsBad(node: Node): Result[Table]
   def markNodesAsBad(node: List[Node]): Result[Table]
@@ -37,23 +44,24 @@ object Table {
 
   def empty(
       nodeId: NodeId,
+      client: Client.Ping,
       ksize: KSize = KSize(8),
       lowerPrefix: Prefix = Prefix(0),
       higherPrefix: Prefix = Prefix(BigInt(2).pow(160))
   )(implicit clock: Clock): Result[Table] = {
 
-    val nodes = Nodes(List.empty, ksize)
-    val cache = Cache(Nodes(List.empty, ksize * 3))
+    val nodes = Nodes(Vector.empty, ksize)
     for {
-      b <- KBucket.create(lowerPrefix, higherPrefix, nodes, cache)
-    } yield KTable(nodeId, NonEmptyVector.of(b))
+      b <- KBucket.create(lowerPrefix, higherPrefix, nodes)
+    } yield KTable(nodeId, NonEmptyVector.of(b), client)
 
   }
 }
 
 final case class KTable(
     nodeId: NodeId,
-    kbuckets: NonEmptyVector[KBucket]
+    kbuckets: NonEmptyVector[KBucket],
+    client: Client.Ping
 )(implicit val c: Clock)
     extends Table {
 
@@ -65,28 +73,58 @@ final case class KTable(
       .map { case (kb, i) => (kb, Index(i)) }
       .toRight(Error.KBucketError(s"bucket for $nodeId not found"))
   }
+  def pingQuestionable(nodes: List[Node]): IO[(Option[Node], List[Node])] = {
+    Stream
+      .emits(nodes)
+      .flatMap { n =>
+        client.ping(n).attempt.map(_.leftMap(_ => n).map(_ => n))
+      }
+      .takeThrough(_.isRight)
+      .compile
+      .toList
+      .map {
+        _.foldLeft((none[Node], List.empty[Node])) {
+          case ((la, ra), el) =>
+            el match {
+              case Left(v)  => v.some -> ra
+              case Right(v) => la     -> (v :: ra)
+            }
+        }
+      }
+  }
   def addNodeToBucket(
       node: Node,
       bucket: KBucket
-  ): Result[NonEmptyVector[KBucket]] = {
+  ): IO[NonEmptyVector[KBucket]] = {
 
-    (bucket.canSplit, bucket.inRange(nodeId), bucket) match {
-      case (true, true, b @ FullBucket(_, _, _, _, _)) =>
-        b.split().flatMap {
-          case (first, second) =>
-            if (first.inRange(node.nodeId))
-              (first.add(node) orElse first
-                .addToCache(node)) map (NonEmptyVector.of(_, second))
-            else
-              (second.add(node) orElse second
-                .addToCache(node)) map (NonEmptyVector.of(first, _))
+    def split: Either[Error, NonEmptyVector[KBucket]] = {
+      bucket.split().flatMap {
+        case (first, second) =>
+          if (first.inRange(node.nodeId))
+            first.addOne(node) map (NonEmptyVector.of(_, second))
+          else
+            second.addOne(node) map (NonEmptyVector.of(first, _))
+      }
+    }
+
+    bucket match {
+      case b @ FullBucket(_, _, _, _)
+          if bucket.inRange(nodeId) && bucket.canSplit =>
+        IO.fromEither(split)
+      case b @ FullBucket(_, _, _, _) =>
+        b.findBad.fold {
+          pingQuestionable(b.questionable)
+            .map {
+              case (Some(n), xs) => b.replace(n, node).flatMap(_.add(xs: _*))
+              case (None, xs)    => b.add(xs: _*)
+            }
+            .flatMap(v => IO.fromEither(v.map(NonEmptyVector.one)))
+        } { v =>
+          IO.fromEither(b.replace(v, node).map(v => NonEmptyVector.one(v)))
         }
-      case (_, false, b @ FullBucket(_, _, _, _, _)) =>
-        b.addToCacheIfNew(node) map (NonEmptyVector.of(_))
 
-      case (_, _, bucket) =>
-        (bucket.add(node) orElse bucket.addToCache(node))
-          .map(NonEmptyVector.one)
+      case bucket =>
+        IO.fromEither(bucket.addOne(node).map(NonEmptyVector.one))
     }
 
   }
@@ -102,27 +140,26 @@ final case class KTable(
     NonEmptyVector(newVec.head, newVec.drop(1))
   }
 
-  override def addNode(node: Node): Result[Table] = {
+  override def addNode(node: Node): IO[Table] = {
 
     for {
-      (kb, i) <- findBucketFor(node.nodeId)
+      (kb, i) <- IO.fromEither(findBucketFor(node.nodeId))
       list    <- addNodeToBucket(node, kb)
       _   = list.toVector.head.nodes
       res = insertBuckets(i, list.reverse)
-    } yield KTable(nodeId, res)
+    } yield KTable(nodeId, res, client)
   }
 
-  override def addNodes(nodes: List[Node]): Result[Table] = {
+  override def addNodes(nodes: List[Node]): IO[Table] = {
     @tailrec
-    def go(t: Result[Table], _nodes: List[Node]): Result[Table] = {
-      (t, _nodes) match {
-        case (e @ Left(_), _) => e
-        case (_, Nil)         => t
-        case (_, x :: xs) =>
+    def go(t: IO[Table], _nodes: List[Node]): IO[Table] = {
+      _nodes match {
+        case Nil => t
+        case x :: xs =>
           go(t.flatMap(_.addNode(x)), xs)
       }
     }
-    go(this.asRight, nodes)
+    go(IO(this), nodes)
   }
 
   override def neighbors(nodeId: NodeId): List[Node] = {
@@ -132,7 +169,7 @@ final case class KTable(
         right: Vector[KBucket],
         current: KBucket,
         isLeft: Boolean
-    ): Stream[Pure, Node] = {
+    ): Stream[Pure, NodeActivity] = {
       (left, right, current) match {
         case (IndexedSeq(), IndexedSeq(), bucket) =>
           Stream.emits(bucket.nodes.value)
@@ -151,11 +188,12 @@ final case class KTable(
       (kb, i) <- findBucketFor(nodeId)
       (left, right) = kbuckets.toVector.splitAt(i.value)
     } yield go(left.reverse, right, kb, true)
-      .filter(_.nodeId =!= nodeId)
+      .filter(_.node.nodeId =!= nodeId)
       .take(kb.nodes.ksize.value)
       .compile
       .toList
-      .sortBy(_.nodeId.distance(nodeId))
+      .sortBy(v => v.node.nodeId.distance(nodeId))
+      .map(_.node)
 
     result.fold(_ => List.empty, identity)
   }
@@ -163,9 +201,9 @@ final case class KTable(
   override def markNodeAsBad(node: Node): Result[Table] = {
     for {
       (kb, i) <- findBucketFor(node.nodeId)
-      kb1     <- kb.replaceFromCache(node)
+      kb1     <- kb.fail(node)
       updated = insertBuckets(i, NonEmptyVector.of(kb1))
-    } yield KTable(nodeId, updated)
+    } yield KTable(nodeId, updated, client)
   }
 
   override def markNodesAsBad(node: List[Node]): Result[Table] = {

@@ -8,10 +8,11 @@ import cats.implicits._
 import cats.{ Eq, Order }
 import com.comcast.ip4s.{ IpAddress, Port }
 import io.estatico.newtype.macros._
-import protocol.Token
-import scodec.{ Attempt, Codec, DecodeResult }
 import scodec.bits.BitVector
 import scodec.codecs._
+import scodec.{ Attempt, Codec, DecodeResult }
+import cats.instances.int._
+import scala.concurrent.duration.FiniteDuration
 
 object types {
 
@@ -65,12 +66,32 @@ object types {
 
   }
 
+  @newtype final case class FailCount(value: Int) {
+    def inc: FailCount = FailCount(value + 1)
+  }
+  object FailCount {
+    val zero = FailCount(0)
+
+    implicit val orderFailCount: Order[FailCount] =
+      Order.reverse(Order.by[FailCount, Int](_.value))
+  }
+  final case class NodeActivity(
+      node: Node,
+      lastActive: LastActive,
+      count: FailCount
+  )
+
+  object NodeActivity {
+    def apply(node: Node)(implicit clock: Clock): NodeActivity =
+      NodeActivity(node, LastActive.now(clock), FailCount.zero)
+  }
   final case class Node(
       nodeId: NodeId,
-      contact: Contact,
-      lastActive: LastActive
+      contact: Contact
   ) extends Product
       with Serializable
+
+  @newtype final case class GoodDuration(finiteDuration: FiniteDuration)
 
   object Node {
 
@@ -79,7 +100,7 @@ object types {
     }
 
     lazy val nodeCodec: Codec[Node] =
-      (NodeId.codec :: Contact.codec :: LastActive.codec).as[Node]
+      (NodeId.codec :: Contact.codec).as[Node]
 
     lazy val listNodeCodec = list(nodeCodec)
     implicit def bencoder: BEncoder[List[Node]] =
