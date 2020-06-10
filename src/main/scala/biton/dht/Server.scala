@@ -1,29 +1,18 @@
 package biton.dht
 
 import java.net.InetSocketAddress
-import java.time.Clock
 
 import biton.dht.protocol.KMessage._
-import biton.dht.protocol.{
-  InfoHash,
-  KMessage,
-  KMessageSocket,
-  Peer,
-  RpcError,
-  RpcErrorCode,
-  Secret,
-  Token,
-  Transaction
-}
-import biton.dht.types.{ LastActive, Node, NodeId }
+import biton.dht.protocol._
+import biton.dht.types.{ Node, NodeId }
 import cats.effect.concurrent.Ref
 import cats.effect.{ Concurrent, ContextShift, Fiber, IO, Resource, Timer }
-import cats.syntax.apply._
 import cats.syntax.applicative._
-import cats.syntax.option._
-import cats.syntax.functor._
+import cats.syntax.apply._
 import cats.syntax.eq._
 import cats.syntax.flatMap._
+import cats.syntax.functor._
+import cats.syntax.option._
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.Stream
 import fs2.io.udp.SocketGroup
@@ -47,13 +36,12 @@ object Server {
       port: Port
   )(
       implicit c: Concurrent[IO],
-      cs: ContextShift[IO],
-      clock: Clock
+      cs: ContextShift[IO]
   ): Server = new Server() {
 
     def addNode(nodeId: NodeId, remote: InetSocketAddress): IO[Unit] = {
       remote.toContact
-        .map(Node(nodeId, _, LastActive.now))
+        .map(Node(nodeId, _))
         .fold(_ => IO(()), table.addNode(_).void)
     }
     def validateToken(token: Token, ipAddress: IpAddress, t: Transaction)(
@@ -83,7 +71,7 @@ object Server {
               case (remote, KMessage.FindNode(t, senderId, target)) =>
                 for {
                   _         <- logger.debug("FindNode")
-                  neighbors <- table.neighborsOf(target)
+                  neighbors <- table.neighbors(target)
                   _         <- addNode(senderId, remote)
                   _         <- s.write1(remote, FindNodeResponse(t, id, neighbors))
                 } yield ()
@@ -93,7 +81,7 @@ object Server {
                   _       <- logger.debug("GetPeers")
                   _       <- addNode(senderId, remote)
                   peers   <- store.get(infohash)
-                  nodes   <- table.neighbors(infohash)
+                  nodes   <- table.neighbors(infohash.toNodeId)
                   secret  <- secrets.get
                   contact <- IO.fromEither(remote.toContact)
                   _ <- s.write1(

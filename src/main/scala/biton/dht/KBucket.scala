@@ -2,9 +2,8 @@ package biton.dht
 
 import java.time.{ Clock, LocalDateTime }
 
-import biton.dht.KBucket._
 import biton.dht.types._
-import cats.{ Apply, Eq }
+import cats.Eq
 import cats.implicits._
 
 sealed abstract class KBucket extends Product with Serializable {
@@ -19,14 +18,19 @@ sealed abstract class KBucket extends Product with Serializable {
     case KBucket.FullBucket(_, _, _, _)  => true
   }
 
+  def random: Node = {
+    assert(nodes.nonEmpty)
+    nodes.get(Random.rint(nodes.value.size)).node
+  }
+
   def questionable: List[Node] = ???
 
   def findBad: Option[Node] = nodes.bad.headOption.map(_.node)
 
-  def replace(node: Node, replacement: Node)(
+  def swap(node: Node, replacement: Node)(
       implicit clock: Clock
   ): Result[KBucket] =
-    KBucket.create(from, to, nodes.replace(node, replacement))
+    KBucket.create(from, to, nodes.swap(node, replacement))
 
   def inRange(nodeId: NodeId): Boolean = {
     val id = nodeId.toPrefix
@@ -82,7 +86,7 @@ sealed abstract class KBucket extends Product with Serializable {
       } yield (first, second)
   }
 
-  def fail(node: Node*)(implicit clock: Clock): Result[KBucket] =
+  def fail(node: Node*): Result[KBucket] =
     KBucket.create(from, to, nodes.fail(node: _*), lastUpdated)
 
   def remove(node: Node)(implicit clock: Clock): Result[KBucket] = {
@@ -120,7 +124,7 @@ sealed abstract class KBucket extends Product with Serializable {
           n <- nodes.filterNot(node).append(node)
           b <- KBucket.create(from, to, n)
         } yield b
-      case b @ KBucket.FullBucket(_, _, __, _) =>
+      case b @ KBucket.FullBucket(_, _, _, _) =>
         Error.KBucketError(s"$b is full").asLeft[KBucket]
     }
   }
@@ -154,7 +158,7 @@ object KBucket {
       to: Prefix,
       nodes: Nodes,
       lastUpdated: LocalDateTime
-  )(implicit clock: Clock): Result[KBucket] = {
+  ): Result[KBucket] = {
     assert(from < to, "'From' should be less than 'to'")
     if (nodes.isFull)
       FullBucket(from, to, nodes, lastUpdated).asRight

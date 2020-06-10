@@ -96,6 +96,7 @@ object protocol {
   @newtype final case class Token(value: BitVector)
 
   object Token {
+    val zero = Token(BitVector.fromInt(0))
     def create(ip: IpAddress, secret: Secret): Token = {
       val hashed = Stream
         .emits((BitVector(ip.toBytes) ++ secret.value).toByteArray)

@@ -2,6 +2,7 @@ package biton.dht
 
 import java.time.Clock
 
+import biton.dht.FindNodes.FindNodesStream
 import biton.dht.protocol._
 import biton.dht.types._
 import cats.effect.concurrent.Ref
@@ -35,6 +36,7 @@ object DHT {
       sg: SocketGroup,
       port: Port,
       table: Table,
+      refreshTableDelay: FiniteDuration,
       store: PeerStore,
       secrets: Secrets
   )(
@@ -50,7 +52,14 @@ object DHT {
       tableState <- TableState.create(table)
       cache      <- NodeInfoCache.create(10.minutes)
       server = Server(table.nodeId, tableState, store, secrets, sg, port)
-    } yield DHTDef(table.nodeId, tableState, cache, client, server)
+    } yield DHTDef(
+      table.nodeId,
+      tableState,
+      refreshTableDelay,
+      cache,
+      client,
+      server
+    )
   }
 
   def bootstrap(
@@ -59,6 +68,8 @@ object DHT {
       store: PeerStore,
       secrets: Secrets,
       nodeId: NodeId = NodeId.gen(),
+      refreshTableDelay: FiniteDuration = 2.minutes,
+      outdatedPeriod: FiniteDuration = 15.minutes,
       contacts: IO[List[Contact]] = BootstrapContacts()
   )(
       implicit c: Concurrent[IO],
@@ -69,11 +80,18 @@ object DHT {
     val client = Client(nodeId, sg)
 
     for {
-      tableState <- TableState.empty(nodeId)
+      tableState <- TableState.empty(nodeId, client, outdatedPeriod)
       cache      <- NodeInfoCache.create(10.minutes)
       server = Server(nodeId, tableState, store, secrets, sg, port)
       _nodes <- contacts
-      dht    <- DHTDef(nodeId, tableState, cache, client, server).bootstrap(_nodes)
+      dht <- DHTDef(
+        nodeId,
+        tableState,
+        refreshTableDelay,
+        cache,
+        client,
+        server
+      ).bootstrap(_nodes)
     } yield dht
   }
 
@@ -82,6 +100,7 @@ object DHT {
 final case class DHTDef(
     nodeId: NodeId,
     tableState: TableState,
+    refreshTableDelay: FiniteDuration,
     cache: NodeInfoCache,
     client: Client,
     server: Server
@@ -96,7 +115,7 @@ final case class DHTDef(
 
   override def lookup(infoHash: InfoHash): Stream[IO, Peer] =
     Stream
-      .eval(tableState.neighbors(infoHash))
+      .eval(tableState.neighbors(infoHash.toNodeId))
       .flatMap(
         FindPeers(_, infoHash, client, tableState, cache)
       )
@@ -126,7 +145,7 @@ final case class DHTDef(
   }
 
   override def start(): Stream[IO, Unit] = {
-    server.start()
+    server.start().concurrently(refreshTable)
   }
 
   def bootstrap(contacts: List[Contact]): IO[DHTDef] = {
@@ -135,7 +154,7 @@ final case class DHTDef(
       _nodes   <- findNodesFrom(nodes, 3)
       t2       <- tableState.addNodes(_nodes)
       newState <- TableState.create(t2)
-    } yield DHTDef(nodeId, newState, cache, client, server)
+    } yield DHTDef(nodeId, newState, refreshTableDelay, cache, client, server)
   }
 
   def findFromContact(contacts: List[Contact]): IO[List[Node]] = {
@@ -177,6 +196,27 @@ final case class DHTDef(
   override def addNode(node: Node): IO[Unit] = {
     tableState.addNode(node).as(())
   }
+
+  def refreshTable: Stream[IO, Unit] =
+    Stream
+      .eval(tableState.get.map(_.outdated.map(_.random)))
+      .flatMap(Stream.emits(_))
+      .flatMap { target =>
+        Stream
+          .eval(tableState.neighbors(target.nodeId))
+          .flatMap { nodes =>
+            FindNodes(target.nodeId, nodes, client, tableState)
+          }
+          .evalMap {
+            case (stale, good) =>
+              tableState.markNodesAsBad(stale) *>
+                tableState.addNodes(good)
+          }
+          .void
+      }
+      .delayBy(refreshTableDelay)
+      .repeat
+
 }
 
 final case class BootstrapContacts(contactInfo: (Hostname, Port)*) {
@@ -215,7 +255,7 @@ object BootstrapContacts {
 }
 
 trait TableState {
-  def update(f: Table => Result[Table]): IO[Table]
+  def update(f: Table => IO[Table]): IO[Table]
   def get: IO[Table]
   def addNodes(n: List[Node]): IO[Table] = update(_.addNodes(n))
   def addNode(n: Node): IO[Table]        = update(_.addNode(n))
@@ -223,27 +263,25 @@ trait TableState {
     Stream.eval_(update(_.markNodeAsBad(n)))
   def markNodesAsBad(n: List[Node]): IO[Table] =
     update(_.markNodesAsBad(n))
-  def neighbors(infoHash: InfoHash): IO[List[Node]] =
-    get.map(_.neighbors(NodeId(infoHash.value)))
-  def neighborsOf(nodeId: NodeId): IO[List[Node]] =
+  def neighbors(nodeId: NodeId): IO[List[Node]] =
     get.map(_.neighbors(nodeId))
+
 }
 
 object TableState {
   def empty(
-      nodeId: NodeId
+      nodeId: NodeId,
+      client: Client,
+      refreshPeriod: FiniteDuration
   )(implicit c: Concurrent[IO], clock: Clock): IO[TableState] =
-    IO.fromEither(Table.empty(nodeId)) >>= create
+    IO.fromEither(Table.empty(nodeId, client, refreshPeriod)) >>= create
 
   def create(table: Table)(implicit c: Concurrent[IO]): IO[TableState] = {
     Ref[IO].of(table).map { state =>
       new TableState {
-        override def update(f: Table => Result[Table]): IO[Table] =
+        override def update(f: Table => IO[Table]): IO[Table] =
           state.modify { t =>
-            f(t) match {
-              case Left(e)  => t -> IO.raiseError(e)
-              case Right(v) => v -> IO.pure(v)
-            }
+            t -> f(t)
           }.flatten
 
         override def get: IO[Table] = state.get
@@ -273,6 +311,84 @@ object NodeInfoCache {
     }
 }
 
+final case class FindNodes(
+    target: NodeId,
+    nodes: List[Node],
+    client: Client.FindNode,
+    tableState: TableState,
+    logger: Logger[IO]
+)(implicit c: Concurrent[IO]) {
+
+  def requestNodes: Pipe[IO, List[Node], FindNodes.Response] =
+    _.flatMap {
+      Stream
+        .emits(_)
+        .map(
+          node =>
+            client
+              .findNode(node.contact, target)
+              .attempt
+              .map {
+                case Left(_) =>
+                  List(node) -> Nil
+                case Right(v) => Nil -> List(FindNodes.NodeResponse(node, v))
+              }
+        )
+        .parJoin(3)
+        .fold((List.empty[Node], List.empty[FindNodes.NodeResponse])) {
+          case ((ss, rr), (stale, responded)) =>
+            (ss ++ stale, rr ++ responded)
+        }
+        .map {
+          case (stale, responded) => (stale.distinct, responded.distinct)
+        }
+    }
+
+  def processResult(
+      tt: TraversalTable[Node],
+      go: TraversalTable[Node] => FindNodesStream
+  ): Pipe[IO, FindNodes.Response, (List[Node], List[Node])] =
+    _.flatMap {
+      case (stale, responded) =>
+        tt.markNodesAsStale(stale)
+          .markNodesAsResponded(responded.map(_.node))(identity) match {
+          case TraversalTable.Completed(_, _, _) =>
+            //Stream.eval_(logger.error(s"!!! Completed")).drain ++
+            Stream.emit(stale -> responded.flatMap(_.nodes))
+          case t @ TraversalTable.InProgress(_, _, _) =>
+            // Stream.eval_(logger.error(s"!!! InProgress")).drain ++
+            // Stream.eval_(logger.error(TraversalTable.log(nodes))).drain ++
+            Stream.emit(stale -> responded.flatMap(_.nodes)) ++
+              go(t.addNodes(responded.flatMap(_.nodes)))
+        }
+    }
+
+  def findNodes: FindNodesStream = {
+    def go(tt: TraversalTable[Node]): FindNodesStream =
+      Stream
+        .emit(tt.topFresh(3))
+        .through(requestNodes)
+        .through(processResult(tt, go))
+
+    go(TraversalTable.create(target, nodes, 8))
+  }
+}
+
+object FindNodes {
+  val logger = Slf4jLogger.getLogger[IO]
+  final case class NodeResponse(node: Node, nodes: List[Node])
+  type Response        = (List[Node], List[NodeResponse])
+  type StaleNodes      = List[Node]
+  type GoodNodes       = List[Node]
+  type FindNodesStream = Stream[IO, (StaleNodes, GoodNodes)]
+  def apply(
+      target: NodeId,
+      nodes: List[Node],
+      client: Client.FindNode,
+      tableState: TableState
+  )(implicit c: Concurrent[IO]): FindNodesStream =
+    FindNodes(target, nodes, client, tableState, logger).findNodes
+}
 final case class FindPeers(
     nodes: List[Node],
     infoHash: InfoHash,
@@ -296,8 +412,8 @@ final case class FindPeers(
               .attempt
               .map {
                 case Left(_) =>
-                  (List(node), Nil)
-                case Right(v) => (Nil, List(v))
+                  List(node) -> Nil
+                case Right(v) => Nil -> List(v)
               }
         )
         .parJoin(3)
@@ -318,14 +434,14 @@ final case class FindPeers(
     }
 
   def processResult(
-      tt: TraversalTable,
-      go: (TraversalTable => Stream[IO, Peer])
+      tt: TraversalTable[NodeInfo],
+      go: TraversalTable[NodeInfo] => Stream[IO, Peer]
   ): Pipe[IO, Response, Peer] =
     _.flatMap {
       case (stale, responded) =>
         Stream.eval_(tableState.markNodesAsBad(stale)) ++ {
           tt.markNodesAsStale(stale)
-            .markNodesAsResponded(responded.map(_.info)) match {
+            .markNodesAsResponded(responded.map(_.info))(_.node) match {
             case t @ TraversalTable.Completed(_, _, _) =>
               //Stream.eval_(logger.error(s"!!! Completed")).drain ++
               Stream
@@ -342,14 +458,14 @@ final case class FindPeers(
 
   def findPeers: Stream[IO, Peer] = {
 
-    def go(tt: TraversalTable): Stream[IO, Peer] =
+    def go(tt: TraversalTable[NodeInfo]): Stream[IO, Peer] =
       Stream
         .emit(tt.topFresh(3))
         .through(requestPeers)
         //    .through(logResult)
         .through(processResult(tt, go))
 
-    go(TraversalTable.create(infoHash, nodes, 8))
+    go(TraversalTable.create(infoHash.toNodeId, nodes, 8))
   }
 }
 

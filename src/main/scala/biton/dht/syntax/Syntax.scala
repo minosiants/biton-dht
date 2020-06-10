@@ -7,3 +7,4 @@ trait Syntax
     with ByteSyntax
     with ThrowableSyntax
     with InetSocketAddressSyntax
+    with InfoHashSyntax
