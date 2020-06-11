@@ -37,6 +37,7 @@ object DHT {
       port: Port,
       table: Table,
       refreshTableDelay: FiniteDuration,
+      cacheExpiration: FiniteDuration,
       store: PeerStore,
       secrets: Secrets
   )(
@@ -50,7 +51,7 @@ object DHT {
 
     for {
       tableState <- TableState.create(table)
-      cache      <- NodeInfoCache.create(10.minutes)
+      cache      <- NodeInfoCache.create(cacheExpiration)
       server = Server(table.nodeId, tableState, store, secrets, sg, port)
     } yield DHTDef(
       table.nodeId,
@@ -69,6 +70,7 @@ object DHT {
       secrets: Secrets,
       nodeId: NodeId = NodeId.gen(),
       refreshTableDelay: FiniteDuration = 2.minutes,
+      cacheExpiration: FiniteDuration = 10.minutes,
       outdatedPeriod: FiniteDuration = 15.minutes,
       contacts: IO[List[Contact]] = BootstrapContacts()
   )(
@@ -81,7 +83,7 @@ object DHT {
 
     for {
       tableState <- TableState.empty(nodeId, client, outdatedPeriod)
-      cache      <- NodeInfoCache.create(10.minutes)
+      cache      <- NodeInfoCache.create(cacheExpiration)
       server = Server(nodeId, tableState, store, secrets, sg, port)
       _nodes <- contacts
       dht <- DHTDef(
@@ -145,7 +147,10 @@ final case class DHTDef(
   }
 
   override def start(): Stream[IO, Unit] = {
-    server.start().concurrently(refreshTable)
+    server
+      .start()
+      .concurrently(refreshTable)
+      .concurrently(cache.purgeExpired)
   }
 
   def bootstrap(contacts: List[Contact]): IO[DHTDef] = {
@@ -293,6 +298,7 @@ object TableState {
 trait NodeInfoCache {
   def put(infoHash: InfoHash, info: List[NodeInfo]): IO[Unit]
   def get(infoHash: InfoHash): IO[Option[List[NodeInfo]]]
+  def purgeExpired: Stream[IO, Unit]
 }
 
 object NodeInfoCache {
@@ -306,6 +312,9 @@ object NodeInfoCache {
 
         override def get(infoHash: InfoHash): IO[Option[List[NodeInfo]]] =
           cache.get(infoHash.value.toHex)
+
+        override def purgeExpired: Stream[IO, Unit] =
+          Stream.eval_(cache.purgeExpired).delayBy(expires).repeat
       }
 
     }
