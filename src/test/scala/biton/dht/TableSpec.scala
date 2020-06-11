@@ -1,5 +1,7 @@
 package biton.dht
 
+import java.nio.file.Path
+
 import biton.dht.protocol.KMessage
 import biton.dht.types.{ KSize, NodeId, Prefix }
 import cats.effect.IO
@@ -95,6 +97,26 @@ class TableSpec extends KSuite with TableFunctions {
       result.size == ksize.value && ordered
     }
   }
+
+  test("toFile".only) {
+    def path(nodeId: NodeId): Path =
+      Path.of(s"/.biton/${nodeId.value.toHex}.dht")
+
+    forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
+      try {
+        val result = (for {
+          t1 <- emptyTable(nodeId)
+          t2 <- t1.addNodes(kbucket.nodes.value.toList.map(_.node))
+          _  <- TableSerialization.toFile(t2, path(nodeId))
+        } yield ()).unsafeRunSync()
+
+      } catch {
+        case e: Throwable => e.printStackTrace()
+      }
+      true
+    }
+  }
+  //override val scalaCheckInitialSeed = "vAbmilUBs8yWyW6eBwLqST70VKO_yzZYQ678ZwF7LkK="
 }
 
 object TableSpec {

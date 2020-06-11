@@ -1,8 +1,11 @@
 package biton.dht
 
-import java.time.{ Clock, LocalDateTime }
+import java.nio.file.Path
+import java.time.{ Clock, LocalDateTime, ZoneOffset }
 
-import biton.dht.KBucket.FullBucket
+import benc.BType.BMap
+import benc.{ BCodec, BEncoder, BType, Benc }
+import biton.dht.KBucket.{ Bucket, EmptyBucket, FullBucket }
 import biton.dht.TraversalNode.{ Fresh, Responded, Stale }
 import biton.dht.TraversalTable.{ Completed, InProgress }
 import biton.dht.types._
@@ -14,11 +17,13 @@ import cats.syntax.either._
 import cats.syntax.eq._
 import cats.syntax.foldable._
 import cats.syntax.option._
+import cats.syntax.functor._
 import cats.syntax.show._
 import fs2.{ Pure, Stream }
+import scodec.bits.BitVector
 
 import scala.annotation.tailrec
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 
 trait Table extends Product with Serializable {
   def nodeId: NodeId
@@ -362,4 +367,89 @@ object TraversalTable {
 
   def log(l: List[TraversalNode[_]]): String =
     s"""\n ${l.map(_.show).mkString("\n")}"""
+}
+
+final case class Nodes2(value: Vector[NodeActivity], ksize: KSize)
+    extends Product
+    with Serializable
+
+object TableSerialization {
+  import benc._
+  final case class STable(nodeId: NodeId, kbuckets: List[KBucket])
+      extends Product
+      with Serializable
+
+  implicit val localDateTimeBEncoder: BEncoder[LocalDateTime] =
+    BEncoder.longBEncoder.contramap(_.toEpochSecond(ZoneOffset.UTC))
+  implicit val localDateTimeBDEcoder: BDecoder[LocalDateTime] =
+    BDecoder.longBDecoder.map(
+      v => LocalDateTime.ofEpochSecond(v, 0, ZoneOffset.UTC)
+    )
+  implicit val failCountBEncoder: BEncoder[FailCount] =
+    BEncoder.intBEncoder.contramap(_.value)
+  implicit val failCountBDEcoder: BDecoder[FailCount] =
+    BDecoder.intBDecoder.map(FailCount(_))
+  implicit val lastActiveBEncoder: BEncoder[LastActive] =
+    localDateTimeBEncoder.contramap(_.value)
+  implicit val lastActiveBDecoder: BDecoder[LastActive] =
+    localDateTimeBDEcoder.map(LastActive(_))
+
+  implicit val ksizeBEncoder: BEncoder[KSize] =
+    BEncoder.intBEncoder.contramap(_.value)
+  implicit val ksizeBDecoder: BDecoder[KSize] =
+    BDecoder.intBDecoder.map(KSize(_))
+
+  implicit def vectorBEncoder[A: BEncoder]: BEncoder[Vector[A]] =
+    BEncoder.listBEncoder[A].contramap(_.toList)
+  implicit def vectorBDecoder[A: BDecoder]: BDecoder[Vector[A]] =
+    BDecoder.listBDecoder[A].map(_.toVector)
+
+  implicit val bigIntBEncoder: BEncoder[BigInt] =
+    BEncoder.bitVectorBEncoder.contramap(v => BitVector(v))
+  implicit val bigIntBDecoder: BDecoder[BigInt] =
+    BDecoder.bitVectorBDecoder.map(v => BigInt(1, v.toByteArray))
+
+  implicit val prefixBEncoder: BEncoder[Prefix] =
+    bigIntBEncoder.contramap(_.value)
+  implicit val prefixBDecoder: BDecoder[Prefix] = bigIntBDecoder.map(Prefix(_))
+
+  implicit val bucketBEncoder  = BCodec[Bucket]
+  implicit val fbucketBEncoder = BCodec[FullBucket]
+  implicit val ebucketBEncoder = BCodec[EmptyBucket]
+
+  def encodeBucket(
+      t: String,
+      b: Either[BencError, BType]
+  ): Either[BencError, BType] =
+    b.flatMap {
+      _.bmap match {
+        case None    => BType.emptyBMap.asRight
+        case Some(m) => BMap(m + ("type" -> BType.string(t))).asRight
+      }
+    }
+
+  implicit val kbucketBEncoder: BEncoder[KBucket] = BEncoder.instance {
+    case b @ Bucket(_, _, _, _)      => encodeBucket("bucket", b.asBType)
+    case b @ FullBucket(_, _, _, _)  => encodeBucket("fbucket", b.asBType)
+    case b @ EmptyBucket(_, _, _, _) => encodeBucket("ebucket", b.asBType)
+  }
+
+  implicit val kbucketBDecoder: BDecoder[KBucket] = BDecoder.instance(
+    v =>
+      v.get[String]("type").flatMap {
+        case "bucket"  => v.as[Bucket]
+        case "fbucket" => v.as[FullBucket]
+        case "ebucket" => v.as[EmptyBucket]
+      }
+  )
+  implicit val tableBCodec = BCodec[STable]
+
+  def toFile(table: Table, path: Path): IO[Unit] = {
+    val bits = Benc.toBenc(STable(table.nodeId, table.kbuckets.toList))
+    IO.fromEither(bits).void
+  }
+
+  def fromFile(path: Path): IO[Table] = {
+    ???
+  }
 }

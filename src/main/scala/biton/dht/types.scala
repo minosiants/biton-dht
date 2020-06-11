@@ -34,8 +34,6 @@ object types {
 
     implicit val eqPrefix: Eq[Prefix] = Eq.instance(_.value === _.value)
 
-    /*implicit val orderPrefix: Order[Prefix] =
-      orderByteVector.contramap[Prefix](_.value.bytes)*/
   }
 
   final case class Contact(ip: IpAddress, port: Port)
