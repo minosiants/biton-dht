@@ -23,7 +23,12 @@ sealed abstract class KBucket extends Product with Serializable {
     nodes.get(Random.rint(nodes.value.size)).node
   }
 
-  def questionable: List[Node] = ???
+  def outdatedNodes(time: LocalDateTime): Vector[Node] = {
+    nodes.value.collect {
+      case NodeActivity(node, lastActive, _) if lastActive.isBefore(time) =>
+        node
+    }
+  }
 
   def findBad: Option[Node] = nodes.bad.headOption.map(_.node)
 

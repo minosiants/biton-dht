@@ -18,8 +18,7 @@ class FindPeersSpec extends KSuite {
     forAll(infoHashGen, Gen.nonEmptyListOf(nodeGen()), nodeIdIntGen) {
       (infohash, nodes, nodeId) =>
         val (peers, nodesForAnnounce, expected) = (for {
-          pingClient       <- PingClient()
-          ts               <- TableState.empty(nodeId, pingClient, 1.minute)
+          ts               <- TableState.empty(nodeId, PingClient(), 1.minute)
           cache            <- NodeInfoCache.create(1.minute)
           client           <- GetPeersClient()
           peers            <- FindPeers(nodes.take(3), infohash, client, ts, cache).compile.toList
@@ -36,11 +35,11 @@ class FindPeersSpec extends KSuite {
 object FindPeersSpec extends KGens {
 
   case class PingClient() extends Client.Ping {
-    override def ping(node: Node): Stream[IO, KMessage.NodeIdResponse] = ???
+    override def ping(node: Node): Stream[IO, KMessage.NodeIdResponse] = {
+      Stream.emit(KMessage.NodeIdResponse(Transaction.gen(), node.nodeId))
+    }
   }
-  object PingClient {
-    def apply(): IO[PingClient] = ???
-  }
+
   case class GetPeersClient(
       peersRef: Ref[IO, List[Peer]],
       counter: Ref[IO, Int]
