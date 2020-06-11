@@ -271,7 +271,7 @@ trait TableState {
 object TableState {
   def empty(
       nodeId: NodeId,
-      client: Client,
+      client: Client.Ping,
       refreshPeriod: FiniteDuration
   )(implicit c: Concurrent[IO], clock: Clock): IO[TableState] =
     IO.fromEither(Table.empty(nodeId, client, refreshPeriod)) >>= create
