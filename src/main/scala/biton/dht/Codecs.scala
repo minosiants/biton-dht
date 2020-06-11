@@ -1,9 +1,9 @@
 package biton.dht
 
-import benc.{ BCodec, BencError }
+import benc.{ BCodec, BDecoder, BEncoder, BencError }
 import cats.syntax.either._
 import com.comcast.ip4s.{ IpAddress, Port }
-import scodec.bits.ByteVector
+import scodec.bits.{ BitVector, ByteVector }
 import scodec.codecs._
 import scodec.{ Attempt, Codec, Err }
 
@@ -13,10 +13,13 @@ trait Codecs {
     i => Attempt.fromOption(Port(i), Err(s"invalid port $i")),
     p => Attempt.successful(p.value)
   )
-  implicit val portBCodec: BCodec[Port] = BCodec.intBCodec.exmap(
-    i => Port(i).toRight(BencError.CodecError(s"invalid port $i")),
-    p => p.value.asRight
+
+  implicit val portBEncoder: BEncoder[Port] =
+    BEncoder.intBEncoder.contramap(_.value)
+  implicit val portBDecoder: BDecoder[Port] = BDecoder.intBDecoder.emap(
+    i => Port(i).toRight(BencError.CodecError(s"invalid port $i"))
   )
+
   //IP6 ???
   implicit val ipAddressScocec: Codec[IpAddress] = bytes(4).exmap(
     i =>
@@ -26,4 +29,15 @@ trait Codecs {
       ),
     ip => Attempt.successful(ByteVector(ip.toBytes))
   )
+
+  implicit val ipAddressBEncoder: BEncoder[IpAddress] =
+    BEncoder.bitVectorBEncoder.contramap(ip => BitVector(ip.toBytes))
+  implicit val ipAddressBDecoder: BDecoder[IpAddress] =
+    BDecoder.bitVectorBDecoder.emap(
+      bits =>
+        IpAddress
+          .fromBytes(bits.toByteArray)
+          .toRight(BencError.CodecError(s"$bits can not convert to IpAddress"))
+    )
+
 }
