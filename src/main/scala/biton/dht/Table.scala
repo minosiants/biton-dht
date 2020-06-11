@@ -58,7 +58,7 @@ final case class KTable(
     nodeId: NodeId,
     kbuckets: NonEmptyVector[KBucket],
     client: Client.Ping,
-    refreshPeriod: FiniteDuration
+    goodPeriod: FiniteDuration
 )(implicit val clock: Clock)
     extends Table {
 
@@ -70,7 +70,7 @@ final case class KTable(
       .map { case (kb, i) => (kb, Index(i)) }
       .toRight(Error.KBucketError(s"bucket for $nodeId not found"))
   }
-  def pingQuestionable(nodes: List[Node]): IO[(Option[Node], List[Node])] = {
+  def pingQuestionable(nodes: Vector[Node]): IO[(Option[Node], List[Node])] = {
     Stream
       .emits(nodes)
       .flatMap { n =>
@@ -110,14 +110,14 @@ final case class KTable(
         IO.fromEither(split)
       case b @ FullBucket(_, _, _, _) =>
         b.findBad.fold {
-          pingQuestionable(b.questionable)
+          pingQuestionable(b.outdatedNodes(goodTime))
             .map {
               case (Some(n), xs) => b.swap(n, node).flatMap(_.add(xs: _*))
               case (None, xs)    => b.add(xs: _*)
             }
             .flatMap(v => IO.fromEither(v.map(NonEmptyVector.one)))
         } { v =>
-          IO.fromEither(b.swap(v, node).map(v => NonEmptyVector.one(v)))
+          IO.fromEither(b.swap(v, node).map(bk => NonEmptyVector.one(bk)))
         }
 
       case bucket =>
@@ -125,6 +125,9 @@ final case class KTable(
     }
 
   }
+
+  def goodTime: LocalDateTime =
+    LocalDateTime.now(clock).minusNanos(goodPeriod.toNanos)
 
   def insertBuckets(
       index: Index,
@@ -214,8 +217,7 @@ final case class KTable(
     kbuckets
       .filter(
         _.lastUpdated
-          .plusNanos(refreshPeriod.toNanos)
-          .isBefore(LocalDateTime.now(clock))
+          .isBefore(goodTime)
       )
 
 }

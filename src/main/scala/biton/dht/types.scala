@@ -1,5 +1,6 @@
 package biton.dht
 
+import java.time.chrono.ChronoLocalDateTime
 import java.time.{ Clock, LocalDateTime }
 
 import benc.{ BDecoder, BEncoder }
@@ -11,6 +12,7 @@ import io.estatico.newtype.macros._
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.{ Attempt, Codec, DecodeResult }
+
 import scala.concurrent.duration.FiniteDuration
 
 object types {
@@ -51,7 +53,9 @@ object types {
     ).as[Contact]
 
   }
-  @newtype final case class LastActive(value: LocalDateTime)
+  @newtype final case class LastActive(value: LocalDateTime) {
+    def isBefore: ChronoLocalDateTime[_] => Boolean = value.isBefore
+  }
 
   object LastActive {
     def now(implicit clock: Clock): LastActive =
@@ -117,8 +121,10 @@ object types {
   }
 
   @newtype final case class Distance(value: BigInt) {
-    def >(other: Distance): Boolean = value > other.value
-    def <(other: Distance): Boolean = value < other.value
+    def >(other: Distance): Boolean  = value > other.value
+    def <(other: Distance): Boolean  = value < other.value
+    def <=(other: Distance): Boolean = value <= other.value
+
   }
 
   object Distance {

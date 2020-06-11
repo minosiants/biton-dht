@@ -36,8 +36,9 @@ final case class Nodes(value: Vector[NodeActivity], ksize: KSize)
   @tailrec
   def fail(node: Node*): Nodes =
     node match {
-      case Seq()   => this
-      case x :: xs => failOne(x).fail(xs: _*)
+      case Seq()           => this
+      case Seq(x)          => failOne(x)
+      case Seq(x, xs @ _*) => failOne(x).fail(xs: _*)
     }
 
   def append(node: Node)(implicit clock: Clock): Result[Nodes] = {
