@@ -1,10 +1,9 @@
 package biton.dht
 
-import java.nio.file.Path
+import java.nio.file.{ Path }
 import java.time.{ Clock, LocalDateTime, ZoneOffset }
 
 import benc.BType.BMap
-import benc.{ BCodec, BEncoder, BType, Benc }
 import biton.dht.KBucket.{ Bucket, EmptyBucket, FullBucket }
 import biton.dht.TraversalNode.{ Fresh, Responded, Stale }
 import biton.dht.TraversalTable.{ Completed, InProgress }
@@ -17,7 +16,6 @@ import cats.syntax.either._
 import cats.syntax.eq._
 import cats.syntax.foldable._
 import cats.syntax.option._
-import cats.syntax.functor._
 import cats.syntax.show._
 import fs2.{ Pure, Stream }
 import scodec.bits.BitVector
@@ -444,12 +442,17 @@ object TableSerialization {
   )
   implicit val tableBCodec = BCodec[STable]
 
-  def toFile(table: Table, path: Path): IO[Unit] = {
-    val bits = Benc.toBenc(STable(table.nodeId, table.kbuckets.toList))
-    IO.fromEither(bits).void
-  }
+  def toFile(path: Path, table: Table): IO[Unit] =
+    for {
+      bits <- IO.fromEither(
+        Benc.toBenc(STable(table.nodeId, table.kbuckets.toList))
+      )
+      _ <- Files.write(path, bits)
+    } yield ()
 
-  def fromFile(path: Path): IO[Table] = {
-    ???
-  }
+  def fromFile(path: Path): IO[STable] =
+    for {
+      bits  <- Files.read[BitVector](path)
+      table <- IO.fromEither(Benc.fromBenc[STable](bits))
+    } yield table
 }

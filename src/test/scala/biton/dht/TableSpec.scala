@@ -107,7 +107,7 @@ class TableSpec extends KSuite with TableFunctions {
         val result = (for {
           t1 <- emptyTable(nodeId)
           t2 <- t1.addNodes(kbucket.nodes.value.toList.map(_.node))
-          _  <- TableSerialization.toFile(t2, path(nodeId))
+          _  <- TableSerialization.toFile(path(nodeId), t2)
         } yield ()).unsafeRunSync()
 
       } catch {
