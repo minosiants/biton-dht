@@ -81,6 +81,7 @@ class DHTSpec extends KSuite with TableFunctions {
                   Port(6881).get,
                   table,
                   15.minutes,
+                  15.minutes,
                   store,
                   secrets
                 )

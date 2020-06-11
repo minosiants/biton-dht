@@ -85,19 +85,13 @@ class TableSpec extends KSuite with TableFunctions {
         t2 <- t1.addNodes(
           (kb2.nodes.value ++ kb1.nodes.value).toList.map(_.node)
         )
-        id   = availableIds(t2.kbuckets.head).head
-        node = kb1.nodes.value.head.node.copy(nodeId = NodeId.fromInt(id))
-        t3 <- t2.addNode(node)
-      } yield t3.neighbors(target)).unsafeRunSync()
+      } yield t2.neighbors(target)).unsafeRunSync()
 
       val ordered = result.sliding(2).forall {
-        case Nil => true
-        case _ :: Nil =>
-          true
         case x :: y :: Nil =>
           x.nodeId.distance(target) <= y.nodeId.distance(target)
+        case _ => true
       }
-
       result.size == ksize.value && ordered
     }
   }
