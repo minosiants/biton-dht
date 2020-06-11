@@ -1,8 +1,7 @@
 package biton.dht
 
-import biton.dht.KBucket.Cache
-import biton.dht.types.{ KSize, NodeId, Prefix }
-import cats.instances.list._
+import biton.dht.types.{ KSize, NodeActivity, NodeId, Prefix }
+import cats.instances.vector._
 import cats.syntax.either._
 import org.scalacheck.Prop.forAll
 
@@ -18,7 +17,7 @@ class KBucketSpec extends KSuite {
   test("add to full kbucket") {
     forAll(kbGen()) { kbucket =>
       val id     = availableIds(kbucket).head
-      val node   = kbucket.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
+      val node   = kbucket.nodes.value.head.node.copy(nodeId = NodeId.fromInt(id))
       val result = kbucket.add(node)
       result === Error.KBucketError(s"$kbucket is full").asLeft
     }
@@ -30,15 +29,14 @@ class KBucketSpec extends KSuite {
       result === KBucket.create(
         kbucket.from,
         kbucket.to,
-        Nodes(List(node), ksize),
-        kbucket.cache
+        Nodes(Vector(NodeActivity(node)), ksize)
       )
     }
   }
 
   test("add to kbucket") {
     forAll(kbGen(ksize, 2)) { kbucket =>
-      val node = kbucket.nodes.value.head
+      val node = kbucket.nodes.value.head.node
       val result = for {
         kb  <- kbucket.remove(node)
         res <- kb.add(node)
@@ -47,19 +45,6 @@ class KBucketSpec extends KSuite {
     }
   }
 
-  test("add to kbucket cache") {
-    forAll(kbGen(), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
-      val result = for {
-        k  <- kbucket.addToCache(node)
-        kk <- k.addToCache(node)
-      } yield kk
-
-      val expected =
-        Cache(Nodes(node :: kbucket.cache.value.value.dropRight(1), ksize))
-
-      result.map(_.cache) === expected.asRight
-    }
-  }
   test("split kbucket") {
     forAll(kbGen(ksize), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
       val result = for {
@@ -81,10 +66,10 @@ class KBucketSpec extends KSuite {
 
   def checkBuckets(first: KBucket, second: KBucket): Boolean = {
     val firstResult = first.nodes.value.foldLeft(true) { (v, n) =>
-      first.inRange(n.nodeId) && v
+      first.inRange(n.node.nodeId) && v
     }
     val secondResult = second.nodes.value.foldLeft(true) { (v, n) =>
-      second.inRange(n.nodeId) && v
+      second.inRange(n.node.nodeId) && v
     }
     firstResult && secondResult
   }

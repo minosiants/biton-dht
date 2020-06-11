@@ -63,6 +63,8 @@ object types {
         Attempt.successful(DecodeResult(LastActive(LocalDateTime.now), bits))
     )
 
+    implicit val eqLastActive: Order[LastActive] =
+      Order.from((a, b) => a.value.compareTo(b.value))
   }
 
   @newtype final case class FailCount(value: Int) {
@@ -83,6 +85,11 @@ object types {
   object NodeActivity {
     def apply(node: Node)(implicit clock: Clock): NodeActivity =
       NodeActivity(node, LastActive.now(clock), FailCount.zero)
+
+    implicit val eqNodeActivity: Eq[NodeActivity] = Eq.instance(
+      (a, b) =>
+        a.node === b.node && a.lastActive === b.lastActive && a.count === b.count
+    )
   }
   final case class Node(
       nodeId: NodeId,

@@ -59,7 +59,9 @@ class DHTSpec extends KSuite with TableFunctions {
     println("--")
     println(
       res.map(
-        _.kbuckets.head.nodes.value.map(_.nodeId.value.toBin).mkString("\n")
+        _.kbuckets.head.nodes.value
+          .map(_.node.nodeId.value.toBin)
+          .mkString("\n")
       )
     )
     true
@@ -74,7 +76,14 @@ class DHTSpec extends KSuite with TableFunctions {
               store <- PeerStore.inmemory()
               table <- loadTable(tableName)
               dht <- DHT
-                .fromTable(sg, Port(6881).get, table, store, secrets)
+                .fromTable(
+                  sg,
+                  Port(6881).get,
+                  table,
+                  15.minutes,
+                  store,
+                  secrets
+                )
               res <- f(dht)
             } yield res
           }

@@ -2,7 +2,6 @@ package biton.dht
 
 import java.time.{ Clock, Instant, ZoneOffset }
 
-import biton.dht.KBucket.Cache
 import biton.dht.protocol.{ InfoHash, Peer, Token }
 import biton.dht.types._
 import cats.effect.{ ContextShift, IO, Timer }
@@ -65,7 +64,7 @@ trait KGens extends KImplicits {
     for {
       id      <- nodeIdGen
       contact <- contactGen
-    } yield Node(id, contact, LastActive.now)
+    } yield Node(id, contact)
 
   def listOfNodesGen(
       size: Int,
@@ -76,9 +75,11 @@ trait KGens extends KImplicits {
         .infiniteStream(nodeIdGen)
         .map(_.take(size * 30).distinct.take(size).toList)
         .retryUntil(_.size == size)
-      res <- list.traverse(v => contactGen.map(Node(v, _, LastActive.now)))
+      res <- list.traverse(v => contactGen.map(Node(v, _)))
     } yield res
 
+  def vectorOfNodesAcitvity(size: Int, nodeIdGen: Gen[NodeId] = nodeIdCharGen) =
+    listOfNodesGen(size, nodeIdGen).map(_.toVector.map(NodeActivity(_)))
   def nodeIdChooseGen(from: Int, to: Int): Gen[NodeId] =
     Gen.choose(from, to).map(NodeId.fromInt)
 
@@ -92,16 +93,15 @@ trait KGens extends KImplicits {
       nodes <- listOfNodesGen(
         nsize,
         nodeIdChooseGen(from.value.toInt, to.value.toInt - 1)
-      ).map(v => Nodes(v, ksize))
-      cache <- listOfNodesGen(nsize).map(v => Cache(Nodes(v, ksize)))
-
+      )
     } yield KBucket
-      .create(from, to, nodes, cache)
+      .create(from, to, Nodes(nodes.map(NodeActivity(_)).toVector, ksize))
       .toOption
       .get
 
   def availableIds(kb: KBucket): Set[Int] = {
-    val ids = kb.nodes.value.map(v => BigInt(v.nodeId.value.toByteArray).toInt)
+    val ids =
+      kb.nodes.value.map(v => BigInt(v.node.nodeId.value.toByteArray).toInt)
     Set.range(kb.from.value.toInt, kb.to.value.toInt) &~ ids.toSet
   }
 

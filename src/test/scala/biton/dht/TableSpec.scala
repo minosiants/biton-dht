@@ -1,82 +1,75 @@
 package biton.dht
 
+import biton.dht.protocol.KMessage
 import biton.dht.types.{ KSize, NodeId, Prefix }
+import cats.effect.IO
 import cats.implicits._
 import org.scalacheck.Prop.forAll
 
+import scala.concurrent.duration._
+
 class TableSpec extends KSuite with TableFunctions {
 
-  val ksize = KSize(3)
-  val from  = Prefix(0)
-  val to    = Prefix(10)
+  import TableSpec._
 
+  val ksize          = KSize(3)
+  val from           = Prefix(0)
+  val to             = Prefix(10)
+  val outdatedPeriod = 1.minute
   def kbGen(from: Int = 0, to: Int = 10) =
     kbucketGen(Prefix(from), Prefix(to), ksize, ksize.value)
 
+  val pingClient = PingClient()
+
+  def emptyTable(nodeId: NodeId, to: Prefix = to) =
+    IO.fromEither(
+      Table.empty(nodeId, pingClient, outdatedPeriod, ksize, from, to)
+    )
+
   test("add to empty table") {
     forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
-      val result = for {
-        table  <- Table.empty(nodeId, ksize, from, to)
-        result <- table.addNodes(kbucket.nodes.value)
-      } yield result
+      val result = (for {
+        table  <- emptyTable(nodeId)
+        result <- table.addNodes(kbucket.nodes.value.toList.map(_.node))
+      } yield result).unsafeRunSync()
 
-      lazy val actual   = result.toOption.get.kbuckets.head.nodes.value
+      lazy val actual   = result.kbuckets.head.nodes.value
       lazy val expected = kbucket.nodes.value
-      result.map(_.bsize) == 1.asRight && expected === actual
+      result.bsize == 1 && expected === actual
     }
 
   }
 
   test("add to table with full bucket") {
     forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
-      val result = for {
-        t1 <- Table.empty(nodeId, ksize, from, to)
-        t2 <- t1.addNodes(kbucket.nodes.value)
+      val result = (for {
+        t1 <- emptyTable(nodeId)
+        t2 <- t1.addNodes(kbucket.nodes.value.toList.map(_.node))
         id   = availableIds(kbucket).head
-        node = kbucket.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
+        node = kbucket.nodes.value.head.node.copy(nodeId = NodeId.fromInt(id))
         t3 <- t2.addNode(node)
-      } yield t3
+      } yield t3).unsafeRunSync()
 
-      val order =
-        result.map(
-          t => t.kbuckets.head.from.value > t.kbuckets.tail.head.from.value
-        )
-      result.map(_.bsize) == 2.asRight && order == true.asRight
+      val order = result.kbuckets.head.from.value > result.kbuckets.tail.head.from.value
+
+      result.bsize == 2 && order
     }
 
-  }
-
-  test("table cache does not overlap with not cache") {
-    forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
-      val table = (for {
-        t1 <- Table.empty(nodeId, ksize, from, to)
-        t2 <- t1.addNodes(kbucket.nodes.value)
-        t3 <- t2.addNodes(kbucket.nodes.value)
-      } yield t3).toOption.get
-
-      val nodes = table.kbuckets.head.nodes.value.map(_.nodeId.toPrefix).toSet
-      val cache =
-        table.kbuckets.head.cache.value.value.map(_.nodeId.toPrefix).toSet
-
-      nodes.intersect(cache).isEmpty
-    }
   }
   test("table with three buckets") {
     forAll(kbGen(), kbGen(10, 20), nodeIdChooseGen(11, 19)) {
       (kb1, kb2, nodeId) =>
-        val result = for {
-          t1 <- Table.empty(nodeId, ksize, from, Prefix(20))
-          t2 <- t1.addNodes(kb2.nodes.value ++ kb1.nodes.value)
+        val result = (for {
+          t1 <- emptyTable(nodeId, Prefix(20))
+          t2 <- t1.addNodes(
+            (kb2.nodes.value ++ kb1.nodes.value).toList.map(_.node)
+          )
           id   = availableIds(t2.kbuckets.head).head
-          node = kb1.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
+          node = kb1.nodes.value.head.node.copy(nodeId = NodeId.fromInt(id))
           t3 <- t2.addNode(node)
-        } yield t3
+        } yield t3).unsafeRunSync()
 
-        result.leftMap {
-          case e: Error => println(e.show)
-        }
-
-        result.map(_.bsize) == 3.asRight
+        result.bsize == 3
     }
   }
 
@@ -87,26 +80,32 @@ class TableSpec extends KSuite with TableFunctions {
       nodeIdChooseGen(11, 19),
       nodeIdChooseGen(0, 19)
     ) { (kb1, kb2, nodeId, target) =>
-      val result = for {
-        t1 <- Table.empty(nodeId, ksize, from, Prefix(20))
-        t2 <- t1.addNodes(kb2.nodes.value ++ kb1.nodes.value)
+      val result = (for {
+        t1 <- emptyTable(nodeId, Prefix(20))
+        t2 <- t1.addNodes(
+          (kb2.nodes.value ++ kb1.nodes.value).toList.map(_.node)
+        )
         id   = availableIds(t2.kbuckets.head).head
-        node = kb1.nodes.value.head.copy(nodeId = NodeId.fromInt(id))
+        node = kb1.nodes.value.head.node.copy(nodeId = NodeId.fromInt(id))
         t3 <- t2.addNode(node)
-      } yield t3.neighbors(target)
+      } yield t3.neighbors(target)).unsafeRunSync()
 
-      val ordered = result.map {
-        _.sliding(2).forall {
-          case x :: y :: Nil =>
-            x.nodeId.distance(target) < y.nodeId.distance(target)
-          case Nil => true
-          case _   => false
-        }
+      val ordered = result.sliding(2).forall {
+        case x :: y :: Nil =>
+          x.nodeId.distance(target) < y.nodeId.distance(target)
+        case Nil => true
+        case _   => false
       }
 
-      result.map(_.size) == ksize.value.asRight &&
-      ordered == true.asRight
+      result.size == ksize.value && ordered
     }
   }
+}
 
+object TableSpec {
+  final case class PingClient() extends Client.Ping {
+    override def ping(
+        node: types.Node
+    ): fs2.Stream[IO, KMessage.NodeIdResponse] = ???
+  }
 }
