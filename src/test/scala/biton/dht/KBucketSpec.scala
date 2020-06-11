@@ -1,9 +1,12 @@
 package biton.dht
 
+import java.time.LocalDateTime
+
 import biton.dht.types.{ KSize, NodeActivity, NodeId, Prefix }
 import cats.instances.vector._
 import cats.syntax.either._
 import org.scalacheck.Prop.forAll
+import scala.concurrent.duration._
 
 class KBucketSpec extends KSuite {
 
@@ -46,7 +49,7 @@ class KBucketSpec extends KSuite {
   }
 
   test("split kbucket") {
-    forAll(kbGen(ksize), nodeGen(nodeIdChooseGen(0, 9))) { (kbucket, node) =>
+    forAll(kbGen(ksize)) { kbucket =>
       val result = for {
         (first, second) <- kbucket.split()
       } yield checkBuckets(first, second)
@@ -61,6 +64,30 @@ class KBucketSpec extends KSuite {
       } yield second.inRange(node.nodeId)
 
       result == true.asRight
+    }
+  }
+
+  test("outdatedNodes") {
+    forAll(kbGen()) { kbucket =>
+      kbucket
+        .outdatedNodes(LocalDateTime.now(clock).plusNanos(1.minute.toNanos))
+        .size == ksize.value
+    }
+  }
+  test("findBad") {
+    forAll(kbGen()) { kbucket =>
+      val n      = kbucket.random
+      val result = kbucket.fail(n).map(_.findBad)
+      result.map(_.isDefined) == true.asRight
+    }
+  }
+
+  test("swap") {
+    forAll(kbGen(), nodeGen()) { (kbucket, replacement) =>
+      val n      = kbucket.random
+      val result = kbucket.swap(n, replacement)
+      result.map(_.find(n.nodeId).isEmpty) == true.asRight &&
+      result.map(_.find(replacement.nodeId).isDefined) == true.asRight
     }
   }
 
