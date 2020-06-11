@@ -98,9 +98,9 @@ sealed abstract class KBucket extends Product with Serializable {
 
   def add(node: Node*)(implicit clock: Clock): Result[KBucket] = {
     node match {
-      case Seq()   => this.asRight
-      case x :: xs => addOne(x).flatMap(_.add(xs: _*))
-
+      case Seq()           => this.asRight
+      case Seq(x)          => addOne(x)
+      case Seq(x, xs @ _*) => addOne(x).flatMap(_.add(xs: _*))
     }
   }
 
