@@ -1,7 +1,6 @@
 package biton.dht
 
-import benc.{ BCodec, BDecoder, BEncoder, BencError }
-import cats.syntax.either._
+import benc.{ BDecoder, BEncoder, BencError }
 import com.comcast.ip4s.{ IpAddress, Port }
 import scodec.bits.{ BitVector, ByteVector }
 import scodec.codecs._

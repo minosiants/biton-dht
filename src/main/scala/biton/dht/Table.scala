@@ -1,7 +1,8 @@
 package biton.dht
 
-import java.nio.file.{ Path }
-import java.time.{ Clock, LocalDateTime, ZoneOffset }
+import java.nio.file.Path
+import java.time.format.DateTimeFormatter
+import java.time.{ Clock, LocalDateTime }
 
 import benc.BType.BMap
 import biton.dht.KBucket.{ Bucket, EmptyBucket, FullBucket }
@@ -23,11 +24,17 @@ import scodec.bits.BitVector
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 
-trait Table extends Product with Serializable {
+trait TableNodeId {
   def nodeId: NodeId
+}
+trait TableBuckets {
+  def kbuckets: NonEmptyVector[KBucket]
+}
+trait TableNodeIdAndBuckets extends TableNodeId with TableBuckets
+
+trait Table extends TableNodeIdAndBuckets with Product with Serializable {
   def bsize: Long = kbuckets.size
   def size: Long  = kbuckets.map(_.nodes.value.size).fold
-  def kbuckets: NonEmptyVector[KBucket]
   def addNode(node: Node): IO[Table]
   def addNodes(nodes: List[Node]): IO[Table]
   def neighbors(nodeId: NodeId): List[Node]
@@ -378,11 +385,13 @@ object TableSerialization {
       with Serializable
 
   implicit val localDateTimeBEncoder: BEncoder[LocalDateTime] =
-    BEncoder.longBEncoder.contramap(_.toEpochSecond(ZoneOffset.UTC))
+    BEncoder.stringBEncoder.contramap {
+      _.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    }
   implicit val localDateTimeBDEcoder: BDecoder[LocalDateTime] =
-    BDecoder.longBDecoder.map(
-      v => LocalDateTime.ofEpochSecond(v, 0, ZoneOffset.UTC)
-    )
+    BDecoder.utf8StringBDecoder.map { v =>
+      LocalDateTime.parse(v, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    }
   implicit val failCountBEncoder: BEncoder[FailCount] =
     BEncoder.intBEncoder.contramap(_.value)
   implicit val failCountBDEcoder: BDecoder[FailCount] =
@@ -442,17 +451,22 @@ object TableSerialization {
   )
   implicit val tableBCodec = BCodec[STable]
 
-  def toFile(path: Path, table: Table): IO[Unit] =
+  def toFile(path: Path, table: TableNodeIdAndBuckets): IO[Path] =
     for {
       bits <- IO.fromEither(
         Benc.toBenc(STable(table.nodeId, table.kbuckets.toList))
       )
-      _ <- Files.write(path, bits)
-    } yield ()
+      p <- Files.write(path / s"${table.nodeId.toHex}.dht", bits)
+    } yield p
 
-  def fromFile(path: Path): IO[STable] =
+  def fromFile(path: Path): IO[TableNodeIdAndBuckets] =
     for {
       bits  <- Files.read[BitVector](path)
       table <- IO.fromEither(Benc.fromBenc[STable](bits))
-    } yield table
+    } yield new TableNodeIdAndBuckets {
+      override def kbuckets: NonEmptyVector[KBucket] =
+        NonEmptyVector.of(table.kbuckets.head, table.kbuckets.tail: _*)
+
+      override def nodeId: NodeId = table.nodeId
+    }
 }

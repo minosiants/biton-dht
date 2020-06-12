@@ -2,9 +2,7 @@ package biton.dht
 
 import java.io.{
   FileInputStream,
-  FileOutputStream,
-  ObjectInputStream,
-  ObjectOutputStream
+  ObjectInputStream
 }
 import java.nio.file.Path
 
@@ -20,6 +18,8 @@ import scodec.bits._
 import scala.concurrent.duration._
 class DHTSpec extends KSuite with TableFunctions {
 
+  val base                 = Path.of(s"target/.biton")
+  def path(nodeId: NodeId) = base / "${nodeId.value.toHex}.dht"
   test("bootstrap".ignore) {
 
     val bs = Blocker[IO]
@@ -28,24 +28,15 @@ class DHTSpec extends KSuite with TableFunctions {
           Secrets.create(1.minute).use { secrets =>
             for {
               store <- PeerStore.inmemory()
-              dht   <- DHT.bootstrap(sg, Port(6881).get, store, secrets)
+              dht   <- DHT.bootstrap(sg, Port(6881).get, store, secrets, base)
               table <- dht.table
             } yield table
           }
         }
       }
 
-    def saveTable(table: Table): IO[Unit] = IO {
-      val fileOutputStream   = new FileOutputStream(fileName(table.nodeId))
-      val objectOutputStream = new ObjectOutputStream(fileOutputStream)
-      objectOutputStream.writeObject(table)
-      objectOutputStream.flush()
-      objectOutputStream.close()
-    }
-
-    def fileName(nodeId: NodeId): String = {
-      s"${nodeId.value.toHex}.kad"
-    }
+    def saveTable(table: Table): IO[Path] =
+      TableSerialization.toFile(base, table)
 
     val res = (for {
       table <- bs
@@ -80,6 +71,8 @@ class DHTSpec extends KSuite with TableFunctions {
                   sg,
                   Port(6881).get,
                   table,
+                  15.minutes,
+                  base,
                   15.minutes,
                   15.minutes,
                   store,

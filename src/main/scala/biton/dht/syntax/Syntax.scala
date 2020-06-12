@@ -8,3 +8,4 @@ trait Syntax
     with ThrowableSyntax
     with InetSocketAddressSyntax
     with InfoHashSyntax
+    with PathSyntax

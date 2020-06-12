@@ -1,5 +1,6 @@
 package biton.dht
 
+import java.nio.file.Path
 import java.time.Clock
 
 import biton.dht.FindNodes.FindNodesStream
@@ -37,6 +38,8 @@ object DHT {
       port: Port,
       table: Table,
       refreshTableDelay: FiniteDuration,
+      saveTableDir: Path,
+      saveTableDelay: FiniteDuration,
       cacheExpiration: FiniteDuration,
       store: PeerStore,
       secrets: Secrets
@@ -56,7 +59,9 @@ object DHT {
     } yield DHTDef(
       table.nodeId,
       tableState,
+      saveTableDir,
       refreshTableDelay,
+      saveTableDelay,
       cache,
       client,
       server
@@ -68,8 +73,10 @@ object DHT {
       port: Port,
       store: PeerStore,
       secrets: Secrets,
+      saveTableDir: Path,
       nodeId: NodeId = NodeId.gen(),
       refreshTableDelay: FiniteDuration = 2.minutes,
+      saveTableDelay: FiniteDuration = 2.minutes,
       cacheExpiration: FiniteDuration = 10.minutes,
       outdatedPeriod: FiniteDuration = 15.minutes,
       contacts: IO[List[Contact]] = BootstrapContacts()
@@ -89,7 +96,9 @@ object DHT {
       dht <- DHTDef(
         nodeId,
         tableState,
+        saveTableDir,
         refreshTableDelay,
+        saveTableDelay,
         cache,
         client,
         server
@@ -102,7 +111,9 @@ object DHT {
 final case class DHTDef(
     nodeId: NodeId,
     tableState: TableState,
+    saveTableDir: Path,
     refreshTableDelay: FiniteDuration,
+    saveTableDelay: FiniteDuration,
     cache: NodeInfoCache,
     client: Client,
     server: Server
@@ -151,6 +162,7 @@ final case class DHTDef(
       .start()
       .concurrently(refreshTable)
       .concurrently(cache.purgeExpired)
+      .concurrently(saveTable)
   }
 
   def bootstrap(contacts: List[Contact]): IO[DHTDef] = {
@@ -159,7 +171,7 @@ final case class DHTDef(
       _nodes   <- findNodesFrom(nodes, 3)
       t2       <- tableState.addNodes(_nodes)
       newState <- TableState.create(t2)
-    } yield DHTDef(nodeId, newState, refreshTableDelay, cache, client, server)
+    } yield this.copy(tableState = newState)
   }
 
   def findFromContact(contacts: List[Contact]): IO[List[Node]] = {
@@ -220,6 +232,15 @@ final case class DHTDef(
           .void
       }
       .delayBy(refreshTableDelay)
+      .repeat
+
+  def saveTable: Stream[IO, Unit] =
+    Stream
+      .eval_(for {
+        t <- tableState.get
+        _ <- TableSerialization.toFile(saveTableDir, t)
+      } yield ())
+      .delayBy(saveTableDelay)
       .repeat
 
 }
