@@ -13,8 +13,6 @@ import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.{ Attempt, Codec, DecodeResult }
 
-import scala.concurrent.duration.FiniteDuration
-
 object types {
 
   @newtype final case class KSize(value: Int) {
@@ -98,8 +96,6 @@ object types {
       contact: Contact
   ) extends Product
       with Serializable
-
-  @newtype final case class GoodDuration(finiteDuration: FiniteDuration)
 
   object Node {
 

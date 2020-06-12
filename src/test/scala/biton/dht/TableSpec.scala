@@ -2,6 +2,7 @@ package biton.dht
 
 import java.nio.file.Path
 
+import biton.dht.Conf.GoodDuration
 import biton.dht.protocol.KMessage
 import biton.dht.types.{ KSize, NodeId, Prefix }
 import cats.effect.IO
@@ -14,10 +15,10 @@ class TableSpec extends KSuite with TableFunctions {
 
   import TableSpec._
 
-  val ksize          = KSize(3)
-  val from           = Prefix(0)
-  val to             = Prefix(10)
-  val outdatedPeriod = 1.minute
+  val ksize        = KSize(3)
+  val from         = Prefix(0)
+  val to           = Prefix(10)
+  val goodDuration = GoodDuration(1.minute)
   def kbGen(from: Int = 0, to: Int = 10) =
     kbucketGen(Prefix(from), Prefix(to), ksize, ksize.value)
 
@@ -25,7 +26,7 @@ class TableSpec extends KSuite with TableFunctions {
 
   def emptyTable(nodeId: NodeId, to: Prefix = to) =
     IO.fromEither(
-      Table.empty(nodeId, pingClient, outdatedPeriod, ksize, from, to)
+      Table.empty(nodeId, pingClient, goodDuration, ksize, from, to)
     )
 
   test("add to empty table") {
@@ -105,7 +106,7 @@ class TableSpec extends KSuite with TableFunctions {
         t1    <- emptyTable(nodeId)
         t2    <- t1.addNodes(kbucket.nodes.value.toList.map(_.node))
         p     <- TableSerialization.toFile(base, t2)
-        table <- TableSerialization.fromFile(p)
+        table <- TableSerialization.fromFile(base, nodeId)
         _     <- Files.delete(p)
       } yield (table, t2)).attempt.unsafeRunSync()
 
@@ -117,6 +118,7 @@ class TableSpec extends KSuite with TableFunctions {
       } == true.asRight
     }
   }
+
   //override val scalaCheckInitialSeed = "vAbmilUBs8yWyW6eBwLqST70VKO_yzZYQ678ZwF7LkK="
 }
 

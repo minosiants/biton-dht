@@ -2,11 +2,10 @@ package biton.dht
 
 import java.time.{ Clock, Instant }
 
+import biton.dht.Conf.CacheExpiration
 import cats.effect.concurrent.Ref
 import cats.effect.{ IO, Timer }
 import cats.syntax.option._
-
-import scala.concurrent.duration.FiniteDuration
 
 trait MemCache[A, B] {
   def get(key: A): IO[Option[B]]
@@ -18,14 +17,17 @@ object MemCache {
   case class Timestamped[B](expires: Instant, value: B)
 
   object Timestamped {
-    def apply[B](value: B, expires: FiniteDuration)(
+    def apply[B](value: B, expires: CacheExpiration)(
         implicit clock: Clock
     ): Timestamped[B] =
-      new Timestamped(Instant.now(clock).plusNanos(expires.toNanos), value)
+      new Timestamped(
+        Instant.now(clock).plusNanos(expires.value.toNanos),
+        value
+      )
   }
 
   def empty[A, B](
-      expires: FiniteDuration
+      expires: CacheExpiration
   )(implicit timer: Timer[IO], clock: Clock): IO[MemCache[A, B]] =
     Ref[IO].of(Map.empty[A, Timestamped[B]]).map { ref =>
       MemCacheMap(ref, expires)
@@ -33,7 +35,7 @@ object MemCache {
 
   final case class MemCacheMap[A, B](
       ref: Ref[IO, Map[A, Timestamped[B]]],
-      expires: FiniteDuration
+      expires: CacheExpiration
   )(implicit timer: Timer[IO], clock: Clock)
       extends MemCache[A, B] {
 

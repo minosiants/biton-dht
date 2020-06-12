@@ -1,5 +1,6 @@
 package biton.dht
 
+import biton.dht.Conf.{ CacheExpiration, GoodDuration }
 import biton.dht.protocol._
 import biton.dht.types.{ Node, NodeInfo }
 import cats.effect.IO
@@ -18,8 +19,8 @@ class FindPeersSpec extends KSuite {
     forAll(infoHashGen, Gen.nonEmptyListOf(nodeGen()), nodeIdIntGen) {
       (infohash, nodes, nodeId) =>
         val (peers, nodesForAnnounce, expected) = (for {
-          ts               <- TableState.empty(nodeId, PingClient(), 1.minute)
-          cache            <- NodeInfoCache.create(1.minute)
+          ts               <- TableState.empty(nodeId, PingClient(), GoodDuration(1.minute))
+          cache            <- NodeInfoCache.create(CacheExpiration(1.minute))
           client           <- GetPeersClient()
           peers            <- FindPeers(nodes.take(3), infohash, client, ts, cache).compile.toList
           expected         <- client.getExpectedPeers

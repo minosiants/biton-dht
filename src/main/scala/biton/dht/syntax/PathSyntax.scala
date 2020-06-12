@@ -10,5 +10,5 @@ trait PathSyntax {
 final class PathOps(val path: Path) extends AnyVal {
 
   def /(el: String): Path =
-    Path.of(path.toString, el)
+    path.resolve(el)
 }

@@ -2,23 +2,21 @@ package biton.dht
 
 import java.net.InetSocketAddress
 
+import biton.dht.Conf.SecretExpiration
 import biton.dht.protocol.KMessage._
 import biton.dht.protocol._
 import biton.dht.types.{ Node, NodeId }
 import cats.effect.concurrent.Ref
-import cats.effect.{ Concurrent, ContextShift, Fiber, IO, Resource, Timer }
+import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import cats.syntax.applicative._
 import cats.syntax.apply._
 import cats.syntax.eq._
-import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.option._
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2.Stream
 import fs2.io.udp.SocketGroup
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-
-import scala.concurrent.duration.FiniteDuration
 
 trait Server {
   def start(): Stream[IO, Unit]
@@ -57,6 +55,10 @@ object Server {
       } yield msg
     }
     override def start(): Stream[IO, Unit] = {
+      _start().concurrently(secrets.refresh())
+    }
+
+    def _start(): Stream[IO, Unit] = {
 
       Stream.eval_(logger.info(s"Starting server on port $port")) ++
         KMessageSocket
@@ -159,43 +161,33 @@ object PeerStore {
 trait Secrets {
   def get: IO[Secret]
   def both: IO[(Secret, Secret)]
+  def refresh(): Stream[IO, Secrets]
+
 }
 
 object Secrets {
 
-  def create(validTime: FiniteDuration)(
+  def create(secretExpiration: SecretExpiration)(
       implicit timer: Timer[IO],
-      cs: ContextShift[IO],
       con: Concurrent[IO]
-  ): Resource[IO, Secrets] = {
-    val secretsResRef = Ref[IO].of((Secret.gen, Secret.gen)).map { ref =>
-      case class SecretsRes(refreshFiber: Option[Fiber[IO, Unit]])
-          extends Secrets {
+  ): IO[Secrets] = {
+    Ref[IO].of((Secret.gen, Secret.gen)).map { ref =>
+      new Secrets {
         override def get: IO[Secret]            = ref.get.map { case (sec1, _) => sec1 }
         override def both: IO[(Secret, Secret)] = ref.get
+        override def refresh(): Stream[IO, Secrets] = {
+          Stream.eval_(update()).delayBy(secretExpiration.value).repeat
+        }
 
-        def stop(): IO[Unit] =
-          refreshFiber.fold(IO(()))(_.cancel)
-
-        def start(): IO[SecretsRes] =
-          for {
-            f <- refresh().start
-          } yield SecretsRes(f.some)
-
-        def refresh(): IO[Unit] =
-          timer.sleep(validTime) >> update() >> refresh()
-
-        def update(): IO[Unit] = {
-          ref.modify {
+        def update(): IO[Secrets] = {
+          ref.modify[Secrets] {
             case (_, sec2) =>
               val result = (sec2, Secret.gen)
-              (result, result -> ())
+              result -> this
           }
         }
 
       }
-      SecretsRes(None)
     }
-    Resource.make(secretsResRef.flatMap(_.start()))(_.stop())
   }
 }
