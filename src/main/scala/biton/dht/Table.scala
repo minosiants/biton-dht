@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter
 import java.time.{ Clock, LocalDateTime }
 
 import benc.BType.BMap
+import biton.dht.Conf.GoodDuration
 import biton.dht.KBucket.{ Bucket, EmptyBucket, FullBucket }
 import biton.dht.TraversalNode.{ Fresh, Responded, Stale }
 import biton.dht.TraversalTable.{ Completed, InProgress }
@@ -22,7 +23,6 @@ import fs2.{ Pure, Stream }
 import scodec.bits.BitVector
 
 import scala.annotation.tailrec
-import scala.concurrent.duration._
 
 trait TableNodeId {
   def nodeId: NodeId
@@ -47,10 +47,17 @@ object Table {
 
   type IndexKBucket = (KBucket, Index)
 
+  def nonEmpty(
+      table: TableNodeIdAndBuckets,
+      client: Client.Ping,
+      goodDuration: GoodDuration
+  )(implicit clock: Clock): Table =
+    KTable(table.nodeId, table.kbuckets, client, goodDuration)
+
   def empty(
       nodeId: NodeId,
       client: Client.Ping,
-      outdatedPeriod: FiniteDuration,
+      goodDuration: GoodDuration,
       ksize: KSize = KSize(8),
       lowerPrefix: Prefix = Prefix(0),
       higherPrefix: Prefix = Prefix(BigInt(2).pow(160))
@@ -59,7 +66,7 @@ object Table {
     val nodes = Nodes(Vector.empty, ksize)
     for {
       b <- KBucket.create(lowerPrefix, higherPrefix, nodes)
-    } yield KTable(nodeId, NonEmptyVector.of(b), client, outdatedPeriod)
+    } yield KTable(nodeId, NonEmptyVector.of(b), client, goodDuration)
 
   }
 }
@@ -68,7 +75,7 @@ final case class KTable(
     nodeId: NodeId,
     kbuckets: NonEmptyVector[KBucket],
     client: Client.Ping,
-    goodPeriod: FiniteDuration
+    goodDuration: GoodDuration
 )(implicit val clock: Clock)
     extends Table {
 
@@ -137,7 +144,7 @@ final case class KTable(
   }
 
   def goodTime: LocalDateTime =
-    LocalDateTime.now(clock).minusNanos(goodPeriod.toNanos)
+    LocalDateTime.now(clock).minusNanos(goodDuration.value.toNanos)
 
   def insertBuckets(
       index: Index,
@@ -459,9 +466,9 @@ object TableSerialization {
       p <- Files.write(path / s"${table.nodeId.toHex}.dht", bits)
     } yield p
 
-  def fromFile(path: Path): IO[TableNodeIdAndBuckets] =
+  def fromFile(path: Path, nodeId: NodeId): IO[TableNodeIdAndBuckets] =
     for {
-      bits  <- Files.read[BitVector](path)
+      bits  <- Files.read[BitVector](path / s"${nodeId.toHex}.dht")
       table <- IO.fromEither(Benc.fromBenc[STable](bits))
     } yield new TableNodeIdAndBuckets {
       override def kbuckets: NonEmptyVector[KBucket] =

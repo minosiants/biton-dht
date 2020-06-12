@@ -3,6 +3,13 @@ package biton.dht
 import java.nio.file.Path
 import java.time.Clock
 
+import biton.dht.Conf.{
+  CacheExpiration,
+  GoodDuration,
+  RefreshTableDelay,
+  SaveTableDelay
+}
+import biton.dht.Error.FileOpsError
 import biton.dht.FindNodes.FindNodesStream
 import biton.dht.protocol._
 import biton.dht.types._
@@ -14,8 +21,6 @@ import fs2.io.udp.SocketGroup
 import fs2.{ Pipe, Stream }
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-
-import scala.concurrent.duration._
 
 trait DHT {
   def lookup(infoHash: InfoHash): Stream[IO, Peer]
@@ -33,16 +38,20 @@ trait DHT {
 object DHT {
   val logger = Slf4jLogger.getLogger[IO]
 
+  def apply(sg: SocketGroup, conf: Conf)(
+      implicit c: Concurrent[IO],
+      cs: ContextShift[IO],
+      time: Timer[IO],
+      clock: Clock
+  ): IO[DHT] = {
+
+    fromTable(sg, conf).recoverWith {
+      case FileOpsError(_, _) => bootstrap(sg, conf)
+    }
+  }
   def fromTable(
       sg: SocketGroup,
-      port: Port,
-      table: Table,
-      refreshTableDelay: FiniteDuration,
-      saveTableDir: Path,
-      saveTableDelay: FiniteDuration,
-      cacheExpiration: FiniteDuration,
-      store: PeerStore,
-      secrets: Secrets
+      conf: Conf
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
@@ -50,18 +59,22 @@ object DHT {
       clock: Clock
   ): IO[DHT] = {
 
-    val client = Client(table.nodeId, sg)
+    val client = Client(conf.nodeId, sg)
 
     for {
+      t <- TableSerialization.fromFile(conf.saveTableDir, conf.nodeId)
+      table = Table.nonEmpty(t, client, conf.goodDuration)
       tableState <- TableState.create(table)
-      cache      <- NodeInfoCache.create(cacheExpiration)
-      server = Server(table.nodeId, tableState, store, secrets, sg, port)
+      cache      <- NodeInfoCache.create(conf.cacheExpiration)
+      secrets    <- Secrets.create(conf.secretExpiration)
+      store      <- PeerStore.inmemory()
+      server = Server(table.nodeId, tableState, store, secrets, sg, conf.port)
     } yield DHTDef(
       table.nodeId,
       tableState,
-      saveTableDir,
-      refreshTableDelay,
-      saveTableDelay,
+      conf.saveTableDir,
+      conf.refreshTableDelay,
+      conf.saveTableDelay,
       cache,
       client,
       server
@@ -70,15 +83,7 @@ object DHT {
 
   def bootstrap(
       sg: SocketGroup,
-      port: Port,
-      store: PeerStore,
-      secrets: Secrets,
-      saveTableDir: Path,
-      nodeId: NodeId = NodeId.gen(),
-      refreshTableDelay: FiniteDuration = 2.minutes,
-      saveTableDelay: FiniteDuration = 2.minutes,
-      cacheExpiration: FiniteDuration = 10.minutes,
-      outdatedPeriod: FiniteDuration = 15.minutes,
+      conf: Conf,
       contacts: IO[List[Contact]] = BootstrapContacts()
   )(
       implicit c: Concurrent[IO],
@@ -86,23 +91,25 @@ object DHT {
       time: Timer[IO],
       clock: Clock
   ): IO[DHT] = {
-    val client = Client(nodeId, sg)
+    val client = Client(conf.nodeId, sg)
 
     for {
-      tableState <- TableState.empty(nodeId, client, outdatedPeriod)
-      cache      <- NodeInfoCache.create(cacheExpiration)
-      server = Server(nodeId, tableState, store, secrets, sg, port)
-      _nodes <- contacts
+      tableState <- TableState.empty(conf.nodeId, client, conf.goodDuration)
+      cache      <- NodeInfoCache.create(conf.cacheExpiration)
+      secrets    <- Secrets.create(conf.secretExpiration)
+      store      <- PeerStore.inmemory()
+      server = Server(conf.nodeId, tableState, store, secrets, sg, conf.port)
+      _contacts <- contacts
       dht <- DHTDef(
-        nodeId,
+        conf.nodeId,
         tableState,
-        saveTableDir,
-        refreshTableDelay,
-        saveTableDelay,
+        conf.saveTableDir,
+        conf.refreshTableDelay,
+        conf.saveTableDelay,
         cache,
         client,
         server
-      ).bootstrap(_nodes)
+      ).bootstrap(_contacts)
     } yield dht
   }
 
@@ -112,8 +119,8 @@ final case class DHTDef(
     nodeId: NodeId,
     tableState: TableState,
     saveTableDir: Path,
-    refreshTableDelay: FiniteDuration,
-    saveTableDelay: FiniteDuration,
+    refreshTableDelay: RefreshTableDelay,
+    saveTableDelay: SaveTableDelay,
     cache: NodeInfoCache,
     client: Client,
     server: Server
@@ -211,7 +218,7 @@ final case class DHTDef(
   }
 
   override def addNode(node: Node): IO[Unit] = {
-    tableState.addNode(node).as(())
+    tableState.addNode(node).void
   }
 
   def refreshTable: Stream[IO, Unit] =
@@ -231,7 +238,7 @@ final case class DHTDef(
           }
           .void
       }
-      .delayBy(refreshTableDelay)
+      .delayBy(refreshTableDelay.value)
       .repeat
 
   def saveTable: Stream[IO, Unit] =
@@ -240,7 +247,7 @@ final case class DHTDef(
         t <- tableState.get
         _ <- TableSerialization.toFile(saveTableDir, t)
       } yield ())
-      .delayBy(saveTableDelay)
+      .delayBy(saveTableDelay.value)
       .repeat
 
 }
@@ -298,9 +305,9 @@ object TableState {
   def empty(
       nodeId: NodeId,
       client: Client.Ping,
-      refreshPeriod: FiniteDuration
+      goodDuration: GoodDuration
   )(implicit c: Concurrent[IO], clock: Clock): IO[TableState] =
-    IO.fromEither(Table.empty(nodeId, client, refreshPeriod)) >>= create
+    IO.fromEither(Table.empty(nodeId, client, goodDuration)) >>= create
 
   def create(table: Table)(implicit c: Concurrent[IO]): IO[TableState] = {
     Ref[IO].of(table).map { state =>
@@ -324,7 +331,7 @@ trait NodeInfoCache {
 
 object NodeInfoCache {
   def create(
-      expires: FiniteDuration
+      expires: CacheExpiration
   )(implicit timer: Timer[IO], clock: Clock): IO[NodeInfoCache] =
     MemCache.empty[String, List[NodeInfo]](expires).map { cache =>
       new NodeInfoCache {
@@ -335,7 +342,7 @@ object NodeInfoCache {
           cache.get(infoHash.value.toHex)
 
         override def purgeExpired: Stream[IO, Unit] =
-          Stream.eval_(cache.purgeExpired).delayBy(expires).repeat
+          Stream.eval_(cache.purgeExpired).delayBy(expires.value).repeat
       }
 
     }

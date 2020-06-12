@@ -35,18 +35,19 @@ object Files {
     }.handleErrorWith { e: Throwable =>
       IO.raiseError(Error.FileOpsError(msg, e))
     }
+
   def delete(path: Path): IO[Boolean] =
-    exec(JFiles.deleteIfExists(path))("Unable to delete file: $path")
+    exec(JFiles.deleteIfExists(path))(s"Unable to delete file: $path")
 
   def write[A: BytesConverter](path: Path, a: A): IO[Path] =
     exec {
       JFiles.createDirectories(path.getParent)
       JFiles.write(path, BytesConverter[A].to(a))
-    }("Unable write to file: $path")
+    }(s"Unable write to file: $path")
 
   def read[A: BytesConverter](path: Path): IO[A] =
     exec {
       BytesConverter[A].from(JFiles.readAllBytes(path))
-    }("Unable write to file: $path")
+    }(s"Unable read from file: $path")
 
 }

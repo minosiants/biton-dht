@@ -1,5 +1,6 @@
 package biton.dht
 
+import biton.dht.Conf.{ GoodDuration, SecretExpiration }
 import biton.dht.protocol.KMessage
 import cats.effect.{ Blocker, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
@@ -23,26 +24,30 @@ class ServerSpec extends KSuite {
     Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
-          Secrets.create(1.minute).use { secrets =>
-            val s = for {
-              pingClient <- PingClient()
-              table      <- TableState.empty(serverNode.nodeId, pingClient, 1.minute)
-              store      <- PeerStore.inmemory()
-              server = Server(
-                serverNode.nodeId,
-                table,
-                store,
-                secrets,
-                sg,
-                serverNode.contact.port
-              )
-            } yield server.start()
-            val c =
-              f(Client(clientNodeId, sg))
-            c.concurrently(Stream.eval_(s)).compile.toList.map(_.head)
-          }
+          val s = for {
+            pingClient <- PingClient()
+            secrets    <- Secrets.create(SecretExpiration(1.minute))
+            table <- TableState.empty(
+              serverNode.nodeId,
+              pingClient,
+              GoodDuration(1.minute)
+            )
+            store <- PeerStore.inmemory()
+            server = Server(
+              serverNode.nodeId,
+              table,
+              store,
+              secrets,
+              sg,
+              serverNode.contact.port
+            )
+          } yield server.start()
+          val c =
+            f(Client(clientNodeId, sg))
+          c.concurrently(Stream.eval_(s)).compile.toList.map(_.head)
         }
       }
+
   test("ping") {
     val result = sendToServer(_.ping(serverNode)).attempt.unsafeRunSync()
     result.isRight

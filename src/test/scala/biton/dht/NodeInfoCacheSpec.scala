@@ -2,6 +2,7 @@ package biton.dht
 
 import java.time.Clock
 
+import biton.dht.Conf.CacheExpiration
 import biton.dht.types.{ Distance, NodeInfo }
 import cats.instances.list._
 import cats.instances.option._
@@ -19,7 +20,10 @@ class NodeInfoCacheSpec extends KSuite {
   test("put/get") {
     forAll(infoHashGen, nodeInfoListGen) { (infohash, nodesInfo) =>
       val result = (for {
-        cache  <- NodeInfoCache.create(1.second)(ioTimer, _clock)
+        cache <- NodeInfoCache.create(CacheExpiration(1.second))(
+          ioTimer,
+          _clock
+        )
         _      <- cache.put(infohash, nodesInfo)
         result <- cache.get(infohash)
       } yield result).unsafeRunSync()
@@ -31,7 +35,10 @@ class NodeInfoCacheSpec extends KSuite {
 
     forAll(infoHashGen, nodeInfoListGen) { (infohash, nodesInfo) =>
       val result = (for {
-        cache  <- NodeInfoCache.create(10.millis)(ioTimer, _clock)
+        cache <- NodeInfoCache.create(CacheExpiration(10.millis))(
+          ioTimer,
+          _clock
+        )
         _      <- cache.put(infohash, nodesInfo)
         result <- ioTimer.sleep(11.millis) >> cache.get(infohash)
       } yield result).unsafeRunSync()
