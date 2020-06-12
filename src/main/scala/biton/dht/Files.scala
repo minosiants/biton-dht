@@ -3,7 +3,6 @@ package biton.dht
 import java.nio.file.{ Path, Files => JFiles }
 
 import cats.effect.IO
-import cats.syntax.functor._
 import scodec.bits.BitVector
 
 trait BytesConverter[A] {
@@ -30,13 +29,24 @@ object BytesConverter {
 
 object Files {
 
-  def write[A: BytesConverter](path: Path, a: A): IO[Unit] =
-    IO(JFiles.write(path, BytesConverter[A].to(a))).handleErrorWith {
-      e: Throwable =>
-        IO.raiseError(Error.FileOperation(s"Unable write to file: $path", e))
-    }.void
+  private def exec[A](f: => A)(msg: String): IO[A] =
+    IO {
+      f
+    }.handleErrorWith { e: Throwable =>
+      IO.raiseError(Error.FileOpsError(msg, e))
+    }
+  def delete(path: Path): IO[Boolean] =
+    exec(JFiles.deleteIfExists(path))("Unable to delete file: $path")
 
-  def read[A: BytesConverter](path: Path): IO[A] = IO {
-    BytesConverter[A].from(JFiles.readAllBytes(path))
-  }
+  def write[A: BytesConverter](path: Path, a: A): IO[Path] =
+    exec {
+      JFiles.createDirectories(path.getParent)
+      JFiles.write(path, BytesConverter[A].to(a))
+    }("Unable write to file: $path")
+
+  def read[A: BytesConverter](path: Path): IO[A] =
+    exec {
+      BytesConverter[A].from(JFiles.readAllBytes(path))
+    }("Unable write to file: $path")
+
 }

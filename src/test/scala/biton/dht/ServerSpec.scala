@@ -5,7 +5,7 @@ import cats.effect.{ Blocker, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2._
 import fs2.io.udp.SocketGroup
-import types.{ Contact, LastActive, Node }
+import types.{ Contact, Node }
 
 import scala.concurrent.duration._
 

@@ -98,22 +98,23 @@ class TableSpec extends KSuite with TableFunctions {
     }
   }
 
-  test("toFile".only) {
-    def path(nodeId: NodeId): Path =
-      Path.of(s"/.biton/${nodeId.value.toHex}.dht")
-
+  test("toFile/fromFile") {
+    val base = Path.of(s"target/.biton")
     forAll(kbGen(), nodeIdChooseGen(0, 9)) { (kbucket, nodeId) =>
-      try {
-        val result = (for {
-          t1 <- emptyTable(nodeId)
-          t2 <- t1.addNodes(kbucket.nodes.value.toList.map(_.node))
-          _  <- TableSerialization.toFile(path(nodeId), t2)
-        } yield ()).unsafeRunSync()
+      val result = (for {
+        t1    <- emptyTable(nodeId)
+        t2    <- t1.addNodes(kbucket.nodes.value.toList.map(_.node))
+        p     <- TableSerialization.toFile(base, t2)
+        table <- TableSerialization.fromFile(p)
+        _     <- Files.delete(p)
+      } yield (table, t2)).attempt.unsafeRunSync()
 
-      } catch {
-        case e: Throwable => e.printStackTrace()
+      result.leftMap {
+        case e: Error => println(e.show)
       }
-      true
+      result.map {
+        case (t1, t2) => t1.kbuckets === t2.kbuckets && t1.nodeId === t2.nodeId
+      } == true.asRight
     }
   }
   //override val scalaCheckInitialSeed = "vAbmilUBs8yWyW6eBwLqST70VKO_yzZYQ678ZwF7LkK="

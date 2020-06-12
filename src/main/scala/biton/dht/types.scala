@@ -137,7 +137,9 @@ object types {
     implicit val eqNodeInfo: Eq[NodeInfo] = Eq.fromUniversalEquals
   }
 
-  @newtype final case class NodeId(value: BitVector)
+  @newtype final case class NodeId(value: BitVector) {
+    def toHex: String = value.toHex
+  }
 
   object NodeId {
 
