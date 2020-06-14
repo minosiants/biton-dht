@@ -46,7 +46,7 @@ class ProtocolEncodingSpec extends KSuite {
   val rpcErrorCodeGen: Gen[RpcErrorCode] =
     Gen.oneOf(201, 202, 203, 204).map(RpcErrorCode.find(_).get)
 
-  def transactionGen: Gen[Transaction] = Gen.const(Transaction.gen())
+  def transactionGen: Gen[Transaction] = Gen.const(Random[Transaction].value)
 
   implicit val rpcErrorGen: Gen[RpcError] = for {
     code <- rpcErrorCodeGen

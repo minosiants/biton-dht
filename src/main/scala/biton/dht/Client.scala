@@ -55,7 +55,8 @@ object Client {
   )(
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
-      rt: RaiseThrowable[IO]
+      rt: RaiseThrowable[IO],
+      randomTrans: Random[Transaction]
   ): Client = {
 
     def remote(contact: Contact) =
@@ -98,7 +99,7 @@ object Client {
     new Client() {
 
       override def ping(node: Node): Stream[IO, NodeIdResponse] = {
-        get[NodeIdResponse](node.contact, Ping(Transaction.gen(), node.nodeId)) {
+        get[NodeIdResponse](node.contact, Ping(randomTrans.value, node.nodeId)) {
           case (_, r @ NodeIdResponse(_, _)) =>
             logger.debug(Show[KMessage].show(r)) *>
               IO(r)
@@ -109,7 +110,7 @@ object Client {
           contact: Contact,
           target: NodeId
       ): Stream[IO, List[Node]] = {
-        val fn = FindNode(Transaction.gen(), id, target)
+        val fn = FindNode(randomTrans.value, id, target)
         get[FindNodeResponse](contact, fn) {
           case (_, r @ FindNodeResponse(_, _, _)) =>
             IO(r)
@@ -129,7 +130,7 @@ object Client {
           node: Node,
           infoHash: InfoHash
       ): Stream[IO, NodeResponse] = {
-        val req = GetPeers(Transaction.gen(), id, infoHash)
+        val req = GetPeers(randomTrans.value, id, infoHash)
         get[KMessage](node.contact, req) {
           case (_, r @ NodesWithPeersResponse(_, _, _, _, _)) =>
             IO(r)
@@ -166,7 +167,7 @@ object Client {
           port: Port
       ): Stream[IO, NodeIdResponse] = {
         val req = AnnouncePeer(
-          Transaction.gen(),
+          randomTrans.value,
           ImpliedPort(true),
           id,
           infoHash,
