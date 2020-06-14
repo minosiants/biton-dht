@@ -37,7 +37,9 @@ object FindPeersSpec extends KGens {
 
   case class PingClient() extends Client.Ping {
     override def ping(node: Node): Stream[IO, KMessage.NodeIdResponse] = {
-      Stream.emit(KMessage.NodeIdResponse(Transaction.gen(), node.nodeId))
+      Stream.emit(
+        KMessage.NodeIdResponse(Random[Transaction].value, node.nodeId)
+      )
     }
   }
 

@@ -8,6 +8,11 @@ import scodec.bits.BitVector
 import scala.util.{ Random => SRandom }
 import cats.syntax.traverse._
 import cats.instances.list._
+
+trait Random[A] {
+  def value: A
+}
+
 object Random {
 
   type R[A] = Reader[SRandom, A]
@@ -41,4 +46,11 @@ object Random {
   def `40bytes`: BitVector          = `20bytes` ++ `20bytes`
   def rint(from: Int, to: Int): Int = R.betweenInt(from, to).run(random)
   def rint(to: Int): Int            = rint(0, to: Int)
+
+  def apply[A](implicit R: Random[A]): Random[A] = R
+  def instance[A](v: => A): Random[A] = new Random[A] {
+    override def value: A = v
+  }
+  def random[A: Random]: A = Random[A].value
+
 }

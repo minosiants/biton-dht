@@ -1,7 +1,8 @@
 package biton.dht
 
 import biton.dht.Conf.{ GoodDuration, SecretExpiration }
-import biton.dht.protocol.KMessage
+import biton.dht.protocol.KMessage.NodeIdResponse
+import biton.dht.protocol.{ KMessage, Transaction }
 import cats.effect.{ Blocker, IO }
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2._
@@ -9,6 +10,7 @@ import fs2.io.udp.SocketGroup
 import types.{ Contact, KSize, Node, NodeId, Prefix }
 import cats.syntax.either._
 import cats.syntax.show._
+import scodec.bits.BitVector
 
 import scala.concurrent.duration._
 
@@ -35,6 +37,9 @@ class ServerSpec extends KSuite {
     } yield ts
   }
   val clientNodeId = nodeIdCharGen.sample.get
+
+  val transaction          = Transaction(BitVector.fromInt(1))
+  implicit val randomTrans = Random.instance(transaction)
   def sendToServer[A](f: Client => Stream[IO, A]): IO[A] =
     Blocker[IO]
       .use { blocker =>
@@ -42,11 +47,8 @@ class ServerSpec extends KSuite {
           val client = Client(clientNodeId, sg)
           for {
             secrets <- Secrets.create(SecretExpiration(1.minute))
-            _ = println("before state")
-            table <- tableState(client)
-            s     <- table.get
-            _ = println(s.kbuckets.collect(_.nodes.value.size))
-            store <- PeerStore.inmemory()
+            table   <- tableState(client)
+            store   <- PeerStore.inmemory()
             server = Server(
               serverNode.nodeId,
               table,
@@ -66,12 +68,10 @@ class ServerSpec extends KSuite {
         }
       }
 
-  test("ping") {
-    val result = sendToServer(_.ping(serverNode)).attempt.unsafeRunSync()
-    result.leftMap {
-      case e: Error => println(e.show)
-    }
-    assert(result.isRight)
+  test("ping".only) {
+    val result = sendToServer(_.ping(serverNode)).unsafeRunSync()
+    assertEquals(result, NodeIdResponse(transaction, serverNode.nodeId))
+
   }
 
   test("findNode") {

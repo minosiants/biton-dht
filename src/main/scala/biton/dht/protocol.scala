@@ -133,9 +133,9 @@ object protocol {
   @newtype final case class Transaction(value: BitVector)
   object Transaction {
 
-    def gen(): Transaction = {
+    implicit val randomTransaction: Random[Transaction] = Random.instance(
       Transaction(Random.`2chars`)
-    }
+    )
 
     implicit val eqTransaction: Eq[Transaction] = Eq.instance { (a, b) =>
       a.value === b.value
