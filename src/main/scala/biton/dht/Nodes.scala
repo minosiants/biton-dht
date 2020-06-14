@@ -49,7 +49,7 @@ final case class Nodes(value: Vector[NodeActivity], ksize: KSize)
     )
   }
 
-  def exists(node: Node): Boolean   = value.exists(_.node.nodeId == node.nodeId)
+  def exists(node: Node): Boolean   = value.exists(_.node.nodeId === node.nodeId)
   def nonExist(node: Node): Boolean = !exists(node)
   def isFull: Boolean               = value.size == ksize.value
   def nonFull: Boolean              = !isFull

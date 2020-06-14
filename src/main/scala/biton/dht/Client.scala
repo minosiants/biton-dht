@@ -56,7 +56,7 @@ object Client {
       implicit c: Concurrent[IO],
       cs: ContextShift[IO],
       rt: RaiseThrowable[IO]
-  ) = {
+  ): Client = {
 
     def remote(contact: Contact) =
       new InetSocketAddress(contact.ip.toInetAddress, contact.port.value)
