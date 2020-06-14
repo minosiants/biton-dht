@@ -12,10 +12,11 @@ import biton.dht.TraversalTable.{ Completed, InProgress }
 import biton.dht.types._
 import cats.Show
 import cats.data.NonEmptyVector
-import cats.effect.IO
+import cats.effect.{ Concurrent, IO }
 import cats.instances.int._
 import cats.syntax.either._
 import cats.syntax.eq._
+import cats.syntax.flatMap._
 import cats.syntax.foldable._
 import cats.syntax.option._
 import cats.syntax.show._
@@ -111,20 +112,19 @@ final case class KTable(
       bucket: KBucket
   ): IO[NonEmptyVector[KBucket]] = {
 
-    def split: Either[Error, NonEmptyVector[KBucket]] = {
-      bucket.split().flatMap {
+    def split(bk: KBucket): IO[NonEmptyVector[KBucket]] = {
+      IO.fromEither(bk.split()).flatMap {
         case (first, second) =>
           if (first.inRange(node.nodeId))
-            first.addOne(node) map (NonEmptyVector.of(_, second))
+            go(first).map(_ :+ second)
           else
-            second.addOne(node) map (NonEmptyVector.of(first, _))
+            go(second).map(first +: _)
       }
     }
 
-    bucket match {
-      case FullBucket(_, _, _, _)
-          if bucket.inRange(nodeId) && bucket.canSplit =>
-        IO.fromEither(split)
+    def go(kb: KBucket): IO[NonEmptyVector[KBucket]] = kb match {
+      case FullBucket(_, _, _, _) if kb.inRange(nodeId) && kb.canSplit =>
+        split(kb)
       case b @ FullBucket(_, _, _, _) =>
         b.findBad.fold {
           pingQuestionable(b.outdatedNodes(goodTime))
@@ -137,10 +137,11 @@ final case class KTable(
           IO.fromEither(b.swap(v, node).map(bk => NonEmptyVector.one(bk)))
         }
 
-      case bucket =>
-        IO.fromEither(bucket.addOne(node).map(NonEmptyVector.one))
+      case kb =>
+        IO.fromEither(kb.addOne(node).map(NonEmptyVector.one))
     }
 
+    go(bucket)
   }
 
   def goodTime: LocalDateTime =
@@ -381,10 +382,6 @@ object TraversalTable {
     s"""\n ${l.map(_.show).mkString("\n")}"""
 }
 
-final case class Nodes2(value: Vector[NodeActivity], ksize: KSize)
-    extends Product
-    with Serializable
-
 object TableSerialization {
   import benc._
   final case class STable(nodeId: NodeId, kbuckets: List[KBucket])
@@ -476,4 +473,40 @@ object TableSerialization {
 
       override def nodeId: NodeId = table.nodeId
     }
+}
+
+trait TableState {
+  def update(f: Table => IO[Table]): IO[Table]
+  def get: IO[Table]
+  def addNodes(n: List[Node]): IO[Table] = update(_.addNodes(n))
+  def addNode(n: Node): IO[Table]        = update(_.addNode(n))
+  def markNodeAsBad(n: Node): Stream[IO, Nothing] =
+    Stream.eval_(update(_.markNodeAsBad(n)))
+  def markNodesAsBad(n: List[Node]): IO[Table] =
+    update(_.markNodesAsBad(n))
+  def neighbors(nodeId: NodeId): IO[List[Node]] =
+    get.map(_.neighbors(nodeId))
+
+}
+
+object TableState {
+  def empty(
+      nodeId: NodeId,
+      client: Client.Ping,
+      goodDuration: GoodDuration
+  )(implicit c: Concurrent[IO], clock: Clock): IO[TableState] =
+    IO.fromEither(Table.empty(nodeId, client, goodDuration)) >>= create
+
+  def create(table: Table)(implicit c: Concurrent[IO]): IO[TableState] = {
+    SyncRef.create(table).map { state =>
+      new TableState {
+        override def update(f: Table => IO[Table]): IO[Table] =
+          state.update(f)
+
+        override def get: IO[Table] = state.get
+      }
+    }
+
+  }
+
 }

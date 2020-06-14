@@ -24,7 +24,7 @@ class SecretsSpec extends KSuite {
         .toList
     } yield res.head
 
-    res.unsafeRunSync()
+    assert(res.unsafeRunSync())
 
   }
   test("get different secret") {
@@ -45,8 +45,7 @@ class SecretsSpec extends KSuite {
         .toList
     } yield res.head
 
-    res.unsafeRunSync()
-
+    assert(res.unsafeRunSync())
   }
 
 }

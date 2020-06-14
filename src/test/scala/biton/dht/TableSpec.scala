@@ -19,7 +19,7 @@ class TableSpec extends KSuite with TableFunctions {
   val from         = Prefix(0)
   val to           = Prefix(10)
   val goodDuration = GoodDuration(1.minute)
-  def kbGen(from: Int = 0, to: Int = 10) =
+  def kbGen(from: Int = 0, to: Int = 10, ksize: KSize = ksize) =
     kbucketGen(Prefix(from), Prefix(to), ksize, ksize.value)
 
   val pingClient = PingClient()
@@ -116,6 +116,28 @@ class TableSpec extends KSuite with TableFunctions {
       result.map {
         case (t1, t2) => t1.kbuckets === t2.kbuckets && t1.nodeId === t2.nodeId
       } == true.asRight
+    }
+  }
+
+  test("tableState") {
+    forAll(kbGen(0, 100, KSize(10)), nodeIdChooseGen(0, 9)) {
+      (kbucket, nodeId) =>
+        val result = (for {
+          table <- TableState.empty(
+            nodeId,
+            PingClient(),
+            GoodDuration(1.minute)
+          )
+          nodes = kbucket.nodes.value.toList.map(_.node)
+          _ <- table.addNodes(nodes)
+          _ <- table.addNodes(nodes)
+          t <- table.get
+        } yield t).unsafeRunSync()
+
+        result.kbuckets
+          .collect(_.nodes.value.size)
+          .sum == kbucket.nodes.value.size
+
     }
   }
 

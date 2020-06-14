@@ -5,7 +5,6 @@ import java.time.Clock
 
 import biton.dht.Conf.{
   CacheExpiration,
-  GoodDuration,
   RefreshTableDelay,
   SaveTableDelay
 }
@@ -13,7 +12,6 @@ import biton.dht.Error.FileOpsError
 import biton.dht.FindNodes.FindNodesStream
 import biton.dht.protocol._
 import biton.dht.types._
-import cats.effect.concurrent.Ref
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import cats.implicits._
 import com.comcast.ip4s._
@@ -285,42 +283,6 @@ object BootstrapContacts {
 
   def apply(): IO[List[Contact]] =
     BootstrapContacts(transmissionbt, bittorrent, utorrent, silotis).contacts
-}
-
-trait TableState {
-  def update(f: Table => IO[Table]): IO[Table]
-  def get: IO[Table]
-  def addNodes(n: List[Node]): IO[Table] = update(_.addNodes(n))
-  def addNode(n: Node): IO[Table]        = update(_.addNode(n))
-  def markNodeAsBad(n: Node): Stream[IO, Nothing] =
-    Stream.eval_(update(_.markNodeAsBad(n)))
-  def markNodesAsBad(n: List[Node]): IO[Table] =
-    update(_.markNodesAsBad(n))
-  def neighbors(nodeId: NodeId): IO[List[Node]] =
-    get.map(_.neighbors(nodeId))
-
-}
-
-object TableState {
-  def empty(
-      nodeId: NodeId,
-      client: Client.Ping,
-      goodDuration: GoodDuration
-  )(implicit c: Concurrent[IO], clock: Clock): IO[TableState] =
-    IO.fromEither(Table.empty(nodeId, client, goodDuration)) >>= create
-
-  def create(table: Table)(implicit c: Concurrent[IO]): IO[TableState] = {
-    Ref[IO].of(table).map { state =>
-      new TableState {
-        override def update(f: Table => IO[Table]): IO[Table] =
-          state.modify { t =>
-            t -> f(t)
-          }.flatten
-
-        override def get: IO[Table] = state.get
-      }
-    }
-  }
 }
 
 trait NodeInfoCache {
