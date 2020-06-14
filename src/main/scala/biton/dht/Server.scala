@@ -55,7 +55,7 @@ object Server {
       } yield msg
     }
     override def start(): Stream[IO, Unit] = {
-      _start() //.concurrently(secrets.refresh())
+      _start().concurrently(secrets.refresh())
     }
 
     def _start(): Stream[IO, Unit] = {

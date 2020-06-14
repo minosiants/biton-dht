@@ -128,6 +128,7 @@ object protocol {
 
     implicit val eqPeer: Eq[Peer] =
       Eq.instance((a, b) => a.ip === b.ip && a.port === b.port)
+
   }
 
   @newtype final case class Transaction(value: BitVector)
