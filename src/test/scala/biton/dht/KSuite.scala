@@ -26,6 +26,13 @@ trait KImplicits {
 
   implicit val ioTimer: Timer[IO] = IO.timer(executionContext)
 
+  def ordered(nodes: List[Node], target: NodeId) = {
+    nodes.sliding(2).forall {
+      case x :: y :: Nil =>
+        x.nodeId.distance(target) <= y.nodeId.distance(target)
+      case _ => true
+    }
+  }
 }
 
 trait KGens extends KImplicits {

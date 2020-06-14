@@ -90,12 +90,7 @@ class TableSpec extends KSuite with TableFunctions {
         )
       } yield t2.neighbors(target)).unsafeRunSync()
 
-      val ordered = result.sliding(2).forall {
-        case x :: y :: Nil =>
-          x.nodeId.distance(target) <= y.nodeId.distance(target)
-        case _ => true
-      }
-      result.size == ksize.value && ordered
+      result.size == ksize.value && ordered(result, target)
     }
   }
 

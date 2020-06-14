@@ -26,7 +26,6 @@ class ServerSpec extends KSuite {
 
   def tableState(pingClient: Client.Ping): IO[TableState] = {
     val nodes = kbucket().nodes.filterNot(serverNode).value.toList.map(_.node)
-    println(s"nodes: $nodes")
     for {
       ts <- TableState.empty(
         serverNode.nodeId,
@@ -38,8 +37,8 @@ class ServerSpec extends KSuite {
   }
   val clientNodeId = nodeIdCharGen.sample.get
 
-  val transaction          = Transaction(BitVector.fromInt(1))
-  implicit val randomTrans = Random.instance(transaction)
+  val transaction            = Transaction(BitVector.fromInt(1))
+  implicit val constantTrans = Random.instance(transaction)
   def sendToServer[A](f: Client => Stream[IO, A]): IO[A] =
     Blocker[IO]
       .use { blocker =>
@@ -68,20 +67,18 @@ class ServerSpec extends KSuite {
         }
       }
 
-  test("ping".only) {
+  test("ping") {
     val result = sendToServer(_.ping(serverNode)).unsafeRunSync()
     assertEquals(result, NodeIdResponse(transaction, serverNode.nodeId))
 
   }
 
-  test("findNode") {
-    val result =
-      sendToServer(_.findNode(serverNode.contact, serverNode.nodeId)).attempt
-        .unsafeRunSync()
-
-    println(result)
-    assert(result.isRight)
-
+  test("findNode".only) {
+    val response = sendToServer(
+      _.findNode(serverNode.contact, serverNode.nodeId)
+    ).unsafeRunSync()
+    assert(response.size == 8)
+    assert(ordered(response, serverNode.nodeId))
   }
 
 }
