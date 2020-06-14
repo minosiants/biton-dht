@@ -12,8 +12,8 @@ class TraversalTableSpec extends KSuite {
     case Nil => true
     case xs =>
       xs.sliding(2).forall {
-        case x :: y :: Nil => x.distance.value <= y.distance.value
-        case _             => false
+        case x :: y :: Nil => x.distance <= y.distance
+        case _             => true
       }
   }
 
