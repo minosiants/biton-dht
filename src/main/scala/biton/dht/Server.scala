@@ -55,11 +55,10 @@ object Server {
       } yield msg
     }
     override def start(): Stream[IO, Unit] = {
-      _start().concurrently(secrets.refresh())
+      _start() //.concurrently(secrets.refresh())
     }
 
     def _start(): Stream[IO, Unit] = {
-
       Stream.eval_(logger.info(s"Starting server on port $port")) ++
         KMessageSocket
           .createSocket(sg, None, port.some)
