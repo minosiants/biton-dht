@@ -40,7 +40,7 @@ class ServerSpec extends KSuite {
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           val client = Client(clientNodeId, sg)
-          val s = for {
+          for {
             secrets <- Secrets.create(SecretExpiration(1.minute))
             _ = println("before state")
             table <- tableState(client)
@@ -55,14 +55,18 @@ class ServerSpec extends KSuite {
               sg,
               serverNode.contact.port
             )
-          } yield server.start()
-          val c =
-            f(client)
-          c.concurrently(Stream.eval_(s)).compile.toList.map(_.head)
+            rs <- f(client)
+              .delayBy(1.second)
+              .concurrently(server.start())
+              .compile
+              .toList
+              .map(_.head)
+          } yield rs
+
         }
       }
 
-  test("ping".only) {
+  test("ping") {
     val result = sendToServer(_.ping(serverNode)).attempt.unsafeRunSync()
     result.leftMap {
       case e: Error => println(e.show)

@@ -3,11 +3,7 @@ package biton.dht
 import java.nio.file.Path
 import java.time.Clock
 
-import biton.dht.Conf.{
-  CacheExpiration,
-  RefreshTableDelay,
-  SaveTableDelay
-}
+import biton.dht.Conf.{ CacheExpiration, RefreshTableDelay, SaveTableDelay }
 import biton.dht.Error.FileOpsError
 import biton.dht.FindNodes.FindNodesStream
 import biton.dht.protocol._
