@@ -52,7 +52,7 @@ final case class Conf(
     copy(refreshTableDelay = refreshTableDelay)
   def setSaveTableDelay(saveTableDelay: SaveTableDelay): Conf =
     copy(saveTableDelay = saveTableDelay)
-  def setSaveTableDir(path: Path) = copy(saveTableDir = path)
+  def setSaveTableDir(path: Path): Conf = copy(saveTableDir = path)
   def setCacheExpiration(cacheExpiration: CacheExpiration): Conf =
     copy(cacheExpiration = cacheExpiration)
   def setSecretExpiration(secretExpiration: SecretExpiration): Conf =

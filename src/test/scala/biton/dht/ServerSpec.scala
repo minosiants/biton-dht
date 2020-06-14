@@ -3,13 +3,16 @@ package biton.dht
 import biton.dht.Conf.{ GoodDuration, SecretExpiration }
 import biton.dht.protocol.KMessage.NodeIdResponse
 import biton.dht.protocol.{ KMessage, Transaction }
+import biton.dht.types._
 import cats.effect.{ Blocker, IO }
+import cats.instances.list._
+import cats.syntax.either._
+import cats.syntax.show._
+import cats.syntax.traverse._
 import com.comcast.ip4s.{ IpAddress, Port }
 import fs2._
 import fs2.io.udp.SocketGroup
-import types.{ Contact, KSize, Node, NodeId, Prefix }
-import cats.syntax.either._
-import cats.syntax.show._
+import org.scalacheck.Gen
 import scodec.bits.BitVector
 
 import scala.concurrent.duration._
@@ -37,6 +40,8 @@ class ServerSpec extends KSuite {
   }
   val clientNodeId = nodeIdCharGen.sample.get
 
+  val infoHash               = infoHashGen.sample.get
+  val peers                  = Gen.nonEmptyListOf(peerGen).sample.get
   val transaction            = Transaction(BitVector.fromInt(1))
   implicit val constantTrans = Random.instance(transaction)
   def sendToServer[A](f: Client => Stream[IO, A]): IO[A] =
@@ -45,9 +50,10 @@ class ServerSpec extends KSuite {
         SocketGroup[IO](blocker).use { sg =>
           val client = Client(clientNodeId, sg)
           for {
-            secrets <- Secrets.create(SecretExpiration(1.minute))
+            secrets <- Secrets.create(SecretExpiration(100.millis))
             table   <- tableState(client)
             store   <- PeerStore.inmemory()
+            _       <- peers.traverse(v => store.add(infoHash, v))
             server = Server(
               serverNode.nodeId,
               table,
@@ -68,19 +74,62 @@ class ServerSpec extends KSuite {
       }
 
   test("ping") {
+
     val result = sendToServer(_.ping(serverNode)).unsafeRunSync()
     assertEquals(result, NodeIdResponse(transaction, serverNode.nodeId))
 
   }
 
-  test("findNode".only) {
+  test("findNode") {
+
     val response = sendToServer(
       _.findNode(serverNode.contact, serverNode.nodeId)
     ).unsafeRunSync()
+
     assert(response.size == 8)
     assert(ordered(response, serverNode.nodeId))
   }
 
+  test("getPeers") {
+    val response = sendToServer(
+      _.getPeers(serverNode, infoHash)
+    ).unsafeRunSync()
+    assert(response.peers.size == peers.size)
+    assert(response.nodes.size == 8)
+
+  }
+
+  test("announcePeer") {
+    val response = sendToServer(
+      c =>
+        c.getPeers(serverNode, infoHash)
+          .map(_.info.token)
+          .flatMap { token =>
+            c.announcePeer(serverNode, token, infoHash, Port(1222).get)
+          }
+          .flatMap { _ =>
+            c.getPeers(serverNode, infoHash)
+          }
+    ).unsafeRunSync()
+
+    assert(response.peers.size == peers.size + 1)
+  }
+
+  test("announcePeer with bad token") {
+    val response = sendToServer(
+      c =>
+        c.getPeers(serverNode, infoHash).map(_.info.token).flatMap { token =>
+          c.announcePeer(serverNode, token, infoHash, Port(1222).get)
+            .delayBy(210.millis)
+        }
+    ).attempt.unsafeRunSync().leftMap {
+      case e: Error => e.show.contains("Invalid token")
+      case _        => false
+    }
+
+    assertEquals(response, true.asLeft)
+
+  }
 }
 
 object ServerSpec {
