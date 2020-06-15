@@ -71,9 +71,9 @@ class TableSpec extends KSuite with TableFunctions {
         t3 <- t2.addNode(node)
       } yield t3).unsafeRunSync()
 
-      val order = result.kbuckets.head.from.value > result.kbuckets.tail.head.from.value
+      val order = result.kbuckets.head.from.value >= result.kbuckets.tail.head.from.value
 
-      result.bsize == 2 && order
+      result.nonEmpty.size == 2 && order
     }
 
   }
