@@ -18,8 +18,6 @@ package biton.dht
 
 import scala.concurrent.duration._
 
-import org.scalacheck.Gen
-
 import com.comcast.ip4s.{ IpAddress, Port }
 
 import cats.effect.{ Blocker, IO }
@@ -32,6 +30,8 @@ import fs2._
 import fs2.io.udp.SocketGroup
 
 import scodec.bits.BitVector
+
+import org.scalacheck.Gen
 
 import biton.dht.Conf.{ GoodDuration, SecretExpiration }
 import biton.dht.protocol.KMessage.NodeIdResponse

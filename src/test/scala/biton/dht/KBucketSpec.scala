@@ -20,10 +20,10 @@ import java.time.LocalDateTime
 
 import scala.concurrent.duration._
 
-import org.scalacheck.Prop.forAll
-
 import cats.instances.vector._
 import cats.syntax.either._
+
+import org.scalacheck.Prop.forAll
 
 import biton.dht.types.{ KSize, NodeActivity, NodeId, Prefix }
 

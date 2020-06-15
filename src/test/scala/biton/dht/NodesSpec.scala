@@ -16,9 +16,9 @@
 
 package biton.dht
 
-import org.scalacheck.Prop._
-
 import cats.implicits._
+
+import org.scalacheck.Prop._
 
 import types.KSize
 

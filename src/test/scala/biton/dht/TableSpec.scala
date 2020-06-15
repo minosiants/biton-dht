@@ -20,10 +20,10 @@ import java.nio.file.Path
 
 import scala.concurrent.duration._
 
-import org.scalacheck.Prop.forAll
-
 import cats.effect.IO
 import cats.implicits._
+
+import org.scalacheck.Prop.forAll
 
 import biton.dht.Conf.GoodDuration
 import biton.dht.protocol.KMessage
