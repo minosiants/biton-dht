@@ -15,11 +15,13 @@
  */
 
 package biton.dht
-import biton.dht.Conf.SecretExpiration
-
 import scala.concurrent.duration._
+
 import cats.syntax.eq._
+
 import fs2.Stream
+
+import biton.dht.Conf.SecretExpiration
 class SecretsSpec extends KSuite {
 
   test("get the same secret") {

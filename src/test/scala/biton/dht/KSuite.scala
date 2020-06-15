@@ -18,18 +18,23 @@ package biton.dht
 
 import java.time.{ Clock, Instant, ZoneOffset }
 
-import biton.dht.protocol.{ InfoHash, Peer, Token }
-import biton.dht.types._
+import scala.concurrent.ExecutionContext
+
+import org.scalacheck.Gen
+import org.scalacheck.cats.implicits._
+
+import com.comcast.ip4s.{ IpAddress, Port }
+
 import cats.effect.{ ContextShift, IO, Timer }
 import cats.instances.list._
 import cats.syntax.traverse._
-import com.comcast.ip4s.{ IpAddress, Port }
-import munit.ScalaCheckSuite
-import org.scalacheck.Gen
-import org.scalacheck.cats.implicits._
+
 import scodec.bits.BitVector
 
-import scala.concurrent.ExecutionContext
+import biton.dht.protocol.{ InfoHash, Peer, Token }
+import biton.dht.types._
+
+import munit.ScalaCheckSuite
 
 class KSuite extends ScalaCheckSuite with KGens
 

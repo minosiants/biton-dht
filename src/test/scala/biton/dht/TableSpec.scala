@@ -18,14 +18,16 @@ package biton.dht
 
 import java.nio.file.Path
 
+import scala.concurrent.duration._
+
+import org.scalacheck.Prop.forAll
+
+import cats.effect.IO
+import cats.implicits._
+
 import biton.dht.Conf.GoodDuration
 import biton.dht.protocol.KMessage
 import biton.dht.types.{ KSize, NodeId, Prefix }
-import cats.effect.IO
-import cats.implicits._
-import org.scalacheck.Prop.forAll
-
-import scala.concurrent.duration._
 
 class TableSpec extends KSuite with TableFunctions {
 

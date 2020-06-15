@@ -20,12 +20,8 @@ import java.nio.file.Path
 import java.time.format.DateTimeFormatter
 import java.time.{ Clock, LocalDateTime }
 
-import benc.BType.BMap
-import biton.dht.Conf.GoodDuration
-import biton.dht.KBucket.{ Bucket, EmptyBucket, FullBucket }
-import biton.dht.TraversalNode.{ Fresh, Responded, Stale }
-import biton.dht.TraversalTable.{ Completed, InProgress }
-import biton.dht.types._
+import scala.annotation.tailrec
+
 import cats.Show
 import cats.data.NonEmptyVector
 import cats.effect.{ Concurrent, IO }
@@ -36,10 +32,18 @@ import cats.syntax.flatMap._
 import cats.syntax.foldable._
 import cats.syntax.option._
 import cats.syntax.show._
+
 import fs2.{ Pure, Stream }
+
 import scodec.bits.BitVector
 
-import scala.annotation.tailrec
+import biton.dht.Conf.GoodDuration
+import biton.dht.KBucket.{ Bucket, EmptyBucket, FullBucket }
+import biton.dht.TraversalNode.{ Fresh, Responded, Stale }
+import biton.dht.TraversalTable.{ Completed, InProgress }
+import biton.dht.types._
+
+import benc.BType.BMap
 
 trait TableNodeId {
   def nodeId: NodeId

@@ -18,19 +18,23 @@ package biton.dht
 
 import java.net.InetSocketAddress
 
+import scala.concurrent.duration._
+
+import com.comcast.ip4s.Port
+
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
+import cats.Show
+import cats.effect.{ Concurrent, ContextShift, IO }
+import cats.implicits._
+
+import fs2.io.udp.SocketGroup
+import fs2.{ RaiseThrowable, Stream }
+
 import biton.dht
 import biton.dht.protocol.KMessage._
 import biton.dht.protocol._
 import biton.dht.types._
-import cats.Show
-import cats.effect.{ Concurrent, ContextShift, IO }
-import cats.implicits._
-import com.comcast.ip4s.Port
-import fs2.io.udp.SocketGroup
-import fs2.{ RaiseThrowable, Stream }
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-
-import scala.concurrent.duration._
 
 trait Client
     extends Client.Ping

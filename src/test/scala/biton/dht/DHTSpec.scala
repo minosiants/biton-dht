@@ -18,20 +18,24 @@ package biton.dht
 
 import java.nio.file.Path
 
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
 import cats.effect._
 import cats.syntax.either._
 import cats.syntax.show._
+
 import fs2.io.udp.SocketGroup
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
+import scodec.bits._
+
 import protocol.InfoHash
 import types.NodeId
-import scodec.bits._
 class DHTSpec extends KSuite with TableFunctions {
 
   val base   = Path.of(s"target/.biton")
   val nodeId = NodeId.fromBigInt(1000000000)
 
-  test("bootstrap") {
+  test("bootstrap".ignore) {
 
     val bs = Blocker[IO]
       .use { blocker =>
@@ -85,7 +89,7 @@ class DHTSpec extends KSuite with TableFunctions {
       }
   }
 
-  test("lookup".only) {
+  test("lookup".ignore) {
     val bits     = hex"01c8c9ea65fe48a0bb02127c898bef9644b99fe0"
     val infoHash = InfoHash(bits.bits)
     val peers = withDHT(nodeId) { dht =>

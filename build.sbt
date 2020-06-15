@@ -19,10 +19,7 @@ lazy val root = (project in file("."))
     organization := "com.minosiants",
     name := "biton-dht",
     scalaVersion := "2.13.1",
-    scalacOptions ++= Seq(
-      "-Ymacro-annotations",
-      "-Ywarn-unused",
-      "-Yrangepos"),
+    scalacOptions ++= Seq("-Ymacro-annotations", "-Ywarn-unused", "-Yrangepos"),
     libraryDependencies ++= Seq(
       "org.typelevel"     %% "cats-core"        % catsVersion,
       "org.typelevel"     %% "cats-effect"      % catsEffectVersion,
@@ -45,7 +42,8 @@ lazy val root = (project in file("."))
     testFrameworks += new TestFramework("munit.Framework"),
     addCompilerPlugin(scalafixSemanticdb),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
-    addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1")
+    addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
+    addCompilerPlugin("io.tryp"       % "splain"              % "0.5.5" cross CrossVersion.patch)
   )
   .settings(licenceSettings)
   .settings(releaseProcessSettings)
@@ -57,6 +55,7 @@ lazy val licenceSettings = Seq(
     "https://www.apache.org/licenses/LICENSE-2.0.txt"
   ))
 )
+ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.3.0"
 
 import ReleaseTransformations._
 lazy val releaseProcessSettings = Seq(

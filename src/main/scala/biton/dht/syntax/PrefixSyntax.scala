@@ -17,8 +17,9 @@
 package biton.dht
 package syntax
 
-import types.{ NodeId, Prefix }
 import scodec.bits.BitVector
+
+import types.{ NodeId, Prefix }
 
 trait PrefixSyntax {
   implicit def prefixSyntax(prefix: Prefix): PrefixOps = new PrefixOps(prefix)

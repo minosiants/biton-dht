@@ -18,17 +18,19 @@ package biton.dht
 
 import java.time.Clock
 
-import biton.dht.Conf.CacheExpiration
-import biton.dht.types.{ Distance, NodeInfo }
+import scala.concurrent.duration._
+
+import org.scalacheck.Gen
+import org.scalacheck.Prop.forAll
+
 import cats.instances.list._
 import cats.instances.option._
 import cats.syntax.eq._
 import cats.syntax.flatMap._
 import cats.syntax.option._
-import org.scalacheck.Gen
-import org.scalacheck.Prop.forAll
 
-import scala.concurrent.duration._
+import biton.dht.Conf.CacheExpiration
+import biton.dht.types.{ Distance, NodeInfo }
 
 class NodeInfoCacheSpec extends KSuite {
   val _clock: Clock = Clock.systemDefaultZone()

@@ -16,11 +16,14 @@
 
 package biton.dht
 
-import biton.dht.types.NodeId
-import cats.syntax.partialOrder._
-import types._
 import org.scalacheck.Prop._
 import org.scalacheck._
+
+import cats.syntax.partialOrder._
+
+import biton.dht.types.NodeId
+
+import types._
 
 class NodeIdSute extends KSuite {
 

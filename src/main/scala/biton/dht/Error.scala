@@ -16,10 +16,10 @@
 
 package biton.dht
 
-import cats.{ Eq, Show }
-import cats.data.NonEmptyList
-
 import scala.util.control.NoStackTrace
+
+import cats.data.NonEmptyList
+import cats.{ Eq, Show }
 
 sealed abstract class Error extends NoStackTrace with Product with Serializable
 

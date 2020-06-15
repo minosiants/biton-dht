@@ -18,8 +18,13 @@ package biton.dht
 
 import java.net.InetSocketAddress
 
-import benc.{ BCodec, BDecoder, BEncoder, BType, BencError, _ }
-import biton.dht.types._
+import scala.concurrent.duration._
+
+import com.comcast.ip4s.{ IpAddress, Port }
+
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.estatico.newtype.macros.newtype
+
 import cats.effect.{ Concurrent, ContextShift, IO, Resource }
 import cats.instances.either._
 import cats.instances.list._
@@ -29,18 +34,19 @@ import cats.syntax.eq._
 import cats.syntax.flatMap._
 import cats.syntax.show._
 import cats.{ Eq, Show }
-import com.comcast.ip4s.{ IpAddress, Port }
+
 import fs2.concurrent.Queue
 import fs2.io.udp.{ Packet, Socket, SocketGroup }
 import fs2.{ Stream, hash }
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.estatico.newtype.macros.newtype
+
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.stream.{ StreamDecoder, StreamEncoder }
 import scodec.{ Attempt, Codec, DecodeResult, Err }
 
-import scala.concurrent.duration._
+import biton.dht.types._
+
+import benc.{ BCodec, BDecoder, BEncoder, BType, BencError, _ }
 
 object protocol {
 

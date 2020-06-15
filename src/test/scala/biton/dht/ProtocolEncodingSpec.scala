@@ -16,15 +16,18 @@
 
 package biton.dht
 
-import benc.{ BDecoder, BEncoder }
-import biton.dht.protocol.KMessage.{ NodesWithPeersResponse, _ }
-import biton.dht.protocol._
-import biton.dht.types.Node
+import org.scalacheck.Prop._
+import org.scalacheck._
+
 import cats.Eq
 import cats.instances.list._
 import cats.syntax.either._
-import org.scalacheck.Prop._
-import org.scalacheck._
+
+import biton.dht.protocol.KMessage.{ NodesWithPeersResponse, _ }
+import biton.dht.protocol._
+import biton.dht.types.Node
+
+import benc.{ BDecoder, BEncoder }
 
 class ProtocolEncodingSpec extends KSuite {
   property("Ping")(prop[Ping])

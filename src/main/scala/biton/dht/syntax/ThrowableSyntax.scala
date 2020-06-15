@@ -16,8 +16,9 @@
 
 package biton.dht.syntax
 
-import biton.dht.Error
 import cats.syntax.show._
+
+import biton.dht.Error
 
 trait ThrowableSyntax {
   implicit def kadThrowableSyntax(error: Throwable) = new ThrowableOps(error)
