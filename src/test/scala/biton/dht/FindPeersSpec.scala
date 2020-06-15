@@ -18,13 +18,13 @@ package biton.dht
 
 import scala.concurrent.duration._
 
-import org.scalacheck.Gen
-import org.scalacheck.Prop.forAll
-
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 
 import fs2.Stream
+
+import org.scalacheck.Gen
+import org.scalacheck.Prop.forAll
 
 import biton.dht.Conf.{ CacheExpiration, GoodDuration }
 import biton.dht.protocol._

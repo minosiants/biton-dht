@@ -16,12 +16,12 @@
 
 package biton.dht
 
-import org.scalacheck.Prop._
-import org.scalacheck._
-
 import cats.Eq
 import cats.instances.list._
 import cats.syntax.either._
+
+import org.scalacheck.Prop._
+import org.scalacheck._
 
 import biton.dht.protocol.KMessage.{ NodesWithPeersResponse, _ }
 import biton.dht.protocol._

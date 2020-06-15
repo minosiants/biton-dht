@@ -20,14 +20,14 @@ import java.time.Clock
 
 import scala.concurrent.duration._
 
-import org.scalacheck.Gen
-import org.scalacheck.Prop.forAll
-
 import cats.instances.list._
 import cats.instances.option._
 import cats.syntax.eq._
 import cats.syntax.flatMap._
 import cats.syntax.option._
+
+import org.scalacheck.Gen
+import org.scalacheck.Prop.forAll
 
 import biton.dht.Conf.CacheExpiration
 import biton.dht.types.{ Distance, NodeInfo }
