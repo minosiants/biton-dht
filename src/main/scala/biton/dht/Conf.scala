@@ -18,13 +18,15 @@ package biton.dht
 
 import java.nio.file.Path
 
+import scala.concurrent.duration.{ FiniteDuration, _ }
+
+import com.comcast.ip4s.Port
+
 import io.estatico.newtype.macros._
 
-import scala.concurrent.duration.FiniteDuration
-import Conf._
 import biton.dht.types.NodeId
-import com.comcast.ip4s.Port
-import scala.concurrent.duration._
+
+import Conf._
 
 final case class Conf(
     /**

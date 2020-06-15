@@ -18,12 +18,14 @@ package biton.dht
 
 import java.time.Clock
 
-import biton.dht.types.{ KSize, Node, NodeActivity }
+import scala.annotation.tailrec
+
 import cats.Eq
 import cats.instances.order._
 import cats.syntax.eq._
 
-import scala.annotation.tailrec
+import biton.dht.types.{ KSize, Node, NodeActivity }
+
 final case class Nodes(value: Vector[NodeActivity], ksize: KSize)
     extends Product
     with Serializable {

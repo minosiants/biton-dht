@@ -16,22 +16,27 @@
 
 package biton.dht
 
-import biton.dht.Conf.{ GoodDuration, SecretExpiration }
-import biton.dht.protocol.KMessage.NodeIdResponse
-import biton.dht.protocol.{ KMessage, Transaction }
-import biton.dht.types._
+import scala.concurrent.duration._
+
+import org.scalacheck.Gen
+
+import com.comcast.ip4s.{ IpAddress, Port }
+
 import cats.effect.{ Blocker, IO }
 import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.show._
 import cats.syntax.traverse._
-import com.comcast.ip4s.{ IpAddress, Port }
+
 import fs2._
 import fs2.io.udp.SocketGroup
-import org.scalacheck.Gen
+
 import scodec.bits.BitVector
 
-import scala.concurrent.duration._
+import biton.dht.Conf.{ GoodDuration, SecretExpiration }
+import biton.dht.protocol.KMessage.NodeIdResponse
+import biton.dht.protocol.{ KMessage, Transaction }
+import biton.dht.types._
 
 class ServerSpec extends KSuite {
 

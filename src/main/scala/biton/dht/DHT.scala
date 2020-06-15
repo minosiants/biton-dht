@@ -19,18 +19,22 @@ package biton.dht
 import java.nio.file.Path
 import java.time.Clock
 
+import com.comcast.ip4s._
+
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
+import cats.effect.{ Concurrent, ContextShift, IO, Timer }
+import cats.implicits._
+
+import fs2.io.udp.SocketGroup
+import fs2.{ Pipe, Stream }
+
 import biton.dht.Conf.{ CacheExpiration, RefreshTableDelay, SaveTableDelay }
 import biton.dht.Error.FileOpsError
 import biton.dht.FindNodes.FindNodesStream
 import biton.dht.protocol._
 import biton.dht.types._
-import cats.effect.{ Concurrent, ContextShift, IO, Timer }
-import cats.implicits._
-import com.comcast.ip4s._
-import fs2.io.udp.SocketGroup
-import fs2.{ Pipe, Stream }
-import io.chrisdavenport.log4cats.Logger
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 trait DHT {
   def lookup(infoHash: InfoHash): Stream[IO, Peer]

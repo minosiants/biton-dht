@@ -18,10 +18,10 @@ package biton.dht
 
 import java.net.InetSocketAddress
 
-import biton.dht.Conf.SecretExpiration
-import biton.dht.protocol.KMessage._
-import biton.dht.protocol._
-import biton.dht.types.{ Node, NodeId }
+import com.comcast.ip4s.{ IpAddress, Port }
+
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
 import cats.effect.concurrent.Ref
 import cats.effect.{ Concurrent, ContextShift, IO, Timer }
 import cats.syntax.applicative._
@@ -29,10 +29,14 @@ import cats.syntax.apply._
 import cats.syntax.eq._
 import cats.syntax.functor._
 import cats.syntax.option._
-import com.comcast.ip4s.{ IpAddress, Port }
+
 import fs2.Stream
 import fs2.io.udp.SocketGroup
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
+import biton.dht.Conf.SecretExpiration
+import biton.dht.protocol.KMessage._
+import biton.dht.protocol._
+import biton.dht.types.{ Node, NodeId }
 
 trait Server {
   def start(): Stream[IO, Unit]

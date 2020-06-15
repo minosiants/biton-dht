@@ -16,11 +16,13 @@
 
 package biton.dht
 
-import biton.dht.TraversalNode.{ Responded, Stale }
-import biton.dht.types.NodeInfo
-import cats.implicits._
 import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
+
+import cats.implicits._
+
+import biton.dht.TraversalNode.{ Responded, Stale }
+import biton.dht.types.NodeInfo
 
 class TraversalTableSpec extends KSuite {
 

@@ -16,9 +16,11 @@
 
 package biton.dht
 
-import types.KSize
 import org.scalacheck.Prop._
+
 import cats.implicits._
+
+import types.KSize
 
 class NodesSpec extends KSuite {
 

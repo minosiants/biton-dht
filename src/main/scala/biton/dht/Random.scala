@@ -18,12 +18,13 @@ package biton.dht
 
 import java.time.Instant
 
-import cats.data.Reader
-import scodec.bits.BitVector
-
 import scala.util.{ Random => SRandom }
-import cats.syntax.traverse._
+
+import cats.data.Reader
 import cats.instances.list._
+import cats.syntax.traverse._
+
+import scodec.bits.BitVector
 
 trait Random[A] {
   def value: A

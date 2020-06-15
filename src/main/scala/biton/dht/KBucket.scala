@@ -18,9 +18,10 @@ package biton.dht
 
 import java.time.{ Clock, LocalDateTime }
 
-import biton.dht.types._
 import cats.Eq
 import cats.implicits._
+
+import biton.dht.types._
 
 /**
   * Bucket that holds up to ksize of nodes in range of `from` - `to`

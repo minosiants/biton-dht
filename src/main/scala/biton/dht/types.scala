@@ -19,15 +19,20 @@ package biton.dht
 import java.time.chrono.ChronoLocalDateTime
 import java.time.{ Clock, LocalDateTime }
 
-import benc.{ BDecoder, BEncoder }
-import biton.dht.protocol.Token
+import com.comcast.ip4s.{ IpAddress, Port }
+
+import io.estatico.newtype.macros._
+
 import cats.implicits._
 import cats.{ Eq, Order }
-import com.comcast.ip4s.{ IpAddress, Port }
-import io.estatico.newtype.macros._
+
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.{ Attempt, Codec, DecodeResult }
+
+import biton.dht.protocol.Token
+
+import benc.{ BDecoder, BEncoder }
 
 object types {
 

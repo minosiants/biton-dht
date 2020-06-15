@@ -16,9 +16,9 @@
 
 package biton.dht
 
-import cats.implicits._
-import cats.effect.{ Concurrent, IO }
 import cats.effect.concurrent.{ Deferred, Ref }
+import cats.effect.{ Concurrent, IO }
+import cats.implicits._
 
 trait SyncRef[A] {
   def update(f: A => IO[A]): IO[A]

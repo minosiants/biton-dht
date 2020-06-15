@@ -18,10 +18,11 @@ package biton.dht
 
 import java.time.{ Clock, Instant }
 
-import biton.dht.Conf.CacheExpiration
 import cats.effect.concurrent.Ref
 import cats.effect.{ IO, Timer }
 import cats.syntax.option._
+
+import biton.dht.Conf.CacheExpiration
 
 trait MemCache[A, B] {
   def get(key: A): IO[Option[B]]

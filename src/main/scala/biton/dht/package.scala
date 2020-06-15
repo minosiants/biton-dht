@@ -16,17 +16,20 @@
 
 package biton
 
-import biton.dht.syntax.Syntax
-import cats.{ Monoid, Order }
+import scala.Function.const
+
+import com.comcast.ip4s.{ IpAddress, Port }
+
 import cats.instances.either._
 import cats.instances.list._
 import cats.kernel.Eq
 import cats.syntax.either._
 import cats.syntax.foldable._
-import com.comcast.ip4s.{ IpAddress, Port }
+import cats.{ Monoid, Order }
+
 import scodec.bits.{ BitVector, ByteVector }
 
-import scala.Function.const
+import biton.dht.syntax.Syntax
 
 package object dht extends Codecs with Syntax {
 

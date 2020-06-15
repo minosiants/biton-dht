@@ -16,9 +16,10 @@
 
 package biton.dht
 
-import java.nio.file.{ Path, Files => JFiles }
+import java.nio.file.{ Files => JFiles, Path }
 
 import cats.effect.IO
+
 import scodec.bits.BitVector
 
 trait BytesConverter[A] {

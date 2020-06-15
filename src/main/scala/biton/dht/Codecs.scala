@@ -16,11 +16,13 @@
 
 package biton.dht
 
-import benc.{ BDecoder, BEncoder, BencError }
 import com.comcast.ip4s.{ IpAddress, Port }
+
 import scodec.bits.{ BitVector, ByteVector }
 import scodec.codecs._
 import scodec.{ Attempt, Codec, Err }
+
+import benc.{ BDecoder, BEncoder, BencError }
 
 trait Codecs {
 

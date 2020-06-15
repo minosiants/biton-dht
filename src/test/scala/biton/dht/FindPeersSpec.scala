@@ -16,16 +16,19 @@
 
 package biton.dht
 
-import biton.dht.Conf.{ CacheExpiration, GoodDuration }
-import biton.dht.protocol._
-import biton.dht.types.{ Node, NodeInfo }
-import cats.effect.IO
-import cats.effect.concurrent.Ref
-import fs2.Stream
+import scala.concurrent.duration._
+
 import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
 
-import scala.concurrent.duration._
+import cats.effect.IO
+import cats.effect.concurrent.Ref
+
+import fs2.Stream
+
+import biton.dht.Conf.{ CacheExpiration, GoodDuration }
+import biton.dht.protocol._
+import biton.dht.types.{ Node, NodeInfo }
 
 class FindPeersSpec extends KSuite {
 

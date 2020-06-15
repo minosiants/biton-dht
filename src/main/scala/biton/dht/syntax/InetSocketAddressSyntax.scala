@@ -19,13 +19,15 @@ package syntax
 
 import java.net.InetSocketAddress
 
+import scala.util.Try
+
+import com.comcast.ip4s.{ IpAddress, Port }
+
+import cats.syntax.either._
+
 import biton.dht.Result
 import biton.dht.protocol.Peer
 import biton.dht.types.Contact
-import com.comcast.ip4s.{ IpAddress, Port }
-import cats.syntax.either._
-
-import scala.util.Try
 
 trait InetSocketAddressSyntax {
   implicit def inentSocketAddressSyntax(address: InetSocketAddress) =

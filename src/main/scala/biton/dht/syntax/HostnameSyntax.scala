@@ -18,8 +18,9 @@ package biton.dht.syntax
 
 import java.net.{ InetAddress, UnknownHostException }
 
-import cats.effect.IO
 import com.comcast.ip4s.{ Hostname, IpAddress }
+
+import cats.effect.IO
 
 //Remove when next version of ip4s is released
 

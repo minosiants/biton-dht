@@ -18,11 +18,14 @@ package biton.dht
 
 import java.time.LocalDateTime
 
-import biton.dht.types.{ KSize, NodeActivity, NodeId, Prefix }
+import scala.concurrent.duration._
+
+import org.scalacheck.Prop.forAll
+
 import cats.instances.vector._
 import cats.syntax.either._
-import org.scalacheck.Prop.forAll
-import scala.concurrent.duration._
+
+import biton.dht.types.{ KSize, NodeActivity, NodeId, Prefix }
 
 class KBucketSpec extends KSuite {
 
