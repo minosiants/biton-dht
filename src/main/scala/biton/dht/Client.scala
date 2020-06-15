@@ -157,7 +157,7 @@ object Client {
 
         }.flatMap {
             case NodesWithPeersResponse(_, _, token, nodes, peers) =>
-              Stream.eval_(logger.error(s"!!! peers: $peers")) ++
+              Stream.eval_(logger.debug(s"!!! peers: $peers")) ++
                 Stream.emit(
                   dht.NodeResponse(
                     NodeInfo(token, node),

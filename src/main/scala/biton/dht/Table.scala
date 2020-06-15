@@ -62,6 +62,7 @@ trait Table extends TableNodeIdAndBuckets with Product with Serializable {
   def markNodeAsBad(node: Node): IO[Table]
   def markNodesAsBad(node: List[Node]): IO[Table]
   def outdated: Vector[KBucket]
+  def nonEmpty: Vector[KBucket]
 }
 
 object Table {
@@ -252,13 +253,15 @@ final case class KTable(
   }
 
   override def outdated: Vector[KBucket] =
-    kbuckets
-      .filter(_.nodes.nonEmpty)
+    nonEmpty
       .filter(
         _.lastUpdated
           .isBefore(goodTime)
       )
 
+  override def nonEmpty: Vector[KBucket] =
+    kbuckets
+      .filter(_.nodes.nonEmpty)
 }
 
 sealed abstract class TraversalNode[A] {
