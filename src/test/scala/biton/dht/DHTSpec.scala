@@ -12,15 +12,19 @@ import types.NodeId
 import scodec.bits._
 class DHTSpec extends KSuite with TableFunctions {
 
-  val base = Path.of(s"target/.biton")
+  val base   = Path.of(s"target/.biton")
+  val nodeId = NodeId.fromBigInt(1000000000)
 
-  test("bootstrap".ignore) {
+  test("bootstrap") {
 
     val bs = Blocker[IO]
       .use { blocker =>
         SocketGroup[IO](blocker).use { sg =>
           for {
-            dht   <- DHT.bootstrap(sg, Conf.default().setSaveTableDir(base))
+            dht <- DHT.bootstrap(
+              sg,
+              Conf.default().setNodeId(nodeId).setSaveTableDir(base)
+            )
             table <- dht.table
           } yield table
         }
@@ -65,12 +69,11 @@ class DHTSpec extends KSuite with TableFunctions {
       }
   }
 
-  test("lookup".ignore) {
+  test("lookup".only) {
     val bits     = hex"01c8c9ea65fe48a0bb02127c898bef9644b99fe0"
     val infoHash = InfoHash(bits.bits)
-    val nodeId   = ???
     val peers = withDHT(nodeId) { dht =>
-      dht.lookup(infoHash).compile.toList
+      dht.lookup(infoHash).concurrently(dht.start()).compile.toList
     }
 
     val result = peers.unsafeRunSync()

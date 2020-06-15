@@ -72,7 +72,7 @@ object Conf {
     port = Port(6881).get,
     goodDuration = GoodDuration(15.minutes),
     refreshTableDelay = RefreshTableDelay(2.minutes),
-    saveTableDelay = SaveTableDelay(2.minutes),
+    saveTableDelay = SaveTableDelay(1.minute),
     saveTableDir = Path.of(System.getProperty("user.home"), ".biton", "dht"),
     cacheExpiration = CacheExpiration(10.minutes),
     secretExpiration = SecretExpiration(5.minutes)

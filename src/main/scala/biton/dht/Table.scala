@@ -233,6 +233,7 @@ final case class KTable(
 
   override def outdated: Vector[KBucket] =
     kbuckets
+      .filter(_.nodes.nonEmpty)
       .filter(
         _.lastUpdated
           .isBefore(goodTime)
@@ -378,7 +379,7 @@ object TraversalTable {
   ): TraversalTable[A] =
     InProgress(nodeId, Nil, completeSize).addNodes(nodes)
 
-  def log(l: List[TraversalNode[_]]): String =
+  def log[A](l: List[TraversalNode[A]]): String =
     s"""\n ${l.map(_.show).mkString("\n")}"""
 }
 
@@ -415,14 +416,10 @@ object TableSerialization {
   implicit def vectorBDecoder[A: BDecoder]: BDecoder[Vector[A]] =
     BDecoder.listBDecoder[A].map(_.toVector)
 
-  implicit val bigIntBEncoder: BEncoder[BigInt] =
-    BEncoder.bitVectorBEncoder.contramap(v => BitVector(v))
-  implicit val bigIntBDecoder: BDecoder[BigInt] =
-    BDecoder.bitVectorBDecoder.map(v => BigInt(1, v.toByteArray))
-
   implicit val prefixBEncoder: BEncoder[Prefix] =
-    bigIntBEncoder.contramap(_.value)
-  implicit val prefixBDecoder: BDecoder[Prefix] = bigIntBDecoder.map(Prefix(_))
+    BEncoder.bitVectorBEncoder.contramap(v => BitVector(v.value.toByteArray))
+  implicit val prefixBDecoder: BDecoder[Prefix] =
+    BDecoder.bitVectorBDecoder.map(v => Prefix(BigInt(1, v.toByteArray)))
 
   implicit val bucketBEncoder  = BCodec[Bucket]
   implicit val fbucketBEncoder = BCodec[FullBucket]

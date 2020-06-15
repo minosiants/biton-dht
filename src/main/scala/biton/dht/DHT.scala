@@ -124,7 +124,7 @@ final case class DHTDef(
     timer: Timer[IO],
     clock: Clock
 ) extends DHT {
-
+  val logger                    = Slf4jLogger.getLogger[IO]
   override def table: IO[Table] = tableState.get
 
   override def lookup(infoHash: InfoHash): Stream[IO, Peer] =
@@ -345,12 +345,12 @@ final case class FindNodes(
         tt.markNodesAsStale(stale)
           .markNodesAsResponded(responded.map(_.node))(identity) match {
           case TraversalTable.Completed(_, _, _) =>
-            //Stream.eval_(logger.error(s"!!! Completed")).drain ++
-            Stream.emit(stale -> responded.flatMap(_.nodes))
+            Stream.eval_(logger.error(s"!!! Completed")).drain ++
+              Stream.emit(stale -> responded.flatMap(_.nodes))
           case t @ TraversalTable.InProgress(_, _, _) =>
-            // Stream.eval_(logger.error(s"!!! InProgress")).drain ++
-            // Stream.eval_(logger.error(TraversalTable.log(nodes))).drain ++
-            Stream.emit(stale -> responded.flatMap(_.nodes)) ++
+            Stream.eval_(logger.error(s"!!! InProgress")).drain ++
+              Stream.eval_(logger.error(TraversalTable.log(t.nodes))).drain ++
+              Stream.emit(stale -> responded.flatMap(_.nodes)) ++
               go(t.addNodes(responded.flatMap(_.nodes)))
         }
     }
@@ -418,9 +418,9 @@ final case class FindPeers(
   val logResult: Pipe[IO, Response, Response] =
     _.evalTap {
       case (stale, responded) =>
-        logger.error(s"stale $stale") *>
-          logger.error(s"responded $responded") *>
-          logger.error(s"peers ${responded.flatMap(_.peers).size}")
+        logger.debug(s"stale $stale") *>
+          logger.debug(s"responded $responded") *>
+          logger.debug(s"peers ${responded.flatMap(_.peers).size}")
     }
 
   def processResult(
@@ -433,14 +433,15 @@ final case class FindPeers(
           tt.markNodesAsStale(stale)
             .markNodesAsResponded(responded.map(_.info))(_.node) match {
             case t @ TraversalTable.Completed(_, _, _) =>
-              //Stream.eval_(logger.error(s"!!! Completed")).drain ++
-              Stream
-                .eval_(cache.put(infoHash, t.topResponded(8))) ++
+              Stream.eval_(logger.debug(s"!!! Completed")).drain ++
+                Stream.eval_(logger.debug(TraversalTable.log(t.nodes))).drain ++
+                Stream
+                  .eval_(cache.put(infoHash, t.topResponded(8))) ++
                 Stream.emits(responded.flatMap(_.peers))
             case t @ TraversalTable.InProgress(_, _, _) =>
-              // Stream.eval_(logger.error(s"!!! InProgress")).drain ++
-              // Stream.eval_(logger.error(TraversalTable.log(nodes))).drain ++
-              Stream.emits(responded.flatMap(_.peers)) ++
+              Stream.eval_(logger.debug(s"!!! InProgress")).drain ++
+                Stream.eval_(logger.debug(TraversalTable.log(t.nodes))).drain ++
+                Stream.emits(responded.flatMap(_.peers)) ++
                 go(t.addNodes(responded.flatMap(_.nodes)))
           }
         }
@@ -452,7 +453,7 @@ final case class FindPeers(
       Stream
         .emit(tt.topFresh(3))
         .through(requestPeers)
-        //    .through(logResult)
+        .through(logResult)
         .through(processResult(tt, go))
 
     go(TraversalTable.create(infoHash.toNodeId, nodes, 8))
