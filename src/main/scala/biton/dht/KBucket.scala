@@ -6,23 +6,55 @@ import biton.dht.types._
 import cats.Eq
 import cats.implicits._
 
+/**
+  * Bucket that holds up to ksize of nodes in range of `from` - `to`
+  *
+  */
 sealed abstract class KBucket extends Product with Serializable {
+
+  /**
+    * [[Prefix]] from which this bucket holds nodes
+    * Value is inclusive
+    */
   def from: Prefix
+
+  /**
+    * [[Prefix]] to which this bucket holds nodes
+    * Value is exclusive
+    */
   def to: Prefix
+
+  /**
+    * [[Nodes]] that holds all bucket's nodes
+    *
+    */
   def nodes: Nodes
+
+  /**
+    * Last time when this bucket was updated
+    */
   def lastUpdated: LocalDateTime
 
+  /**
+    * Checks if the bucket is full
+    */
   def isFull: Boolean = this match {
     case KBucket.EmptyBucket(_, _, _, _) => false
     case KBucket.Bucket(_, _, _, _)      => false
     case KBucket.FullBucket(_, _, _, _)  => true
   }
 
+  /**
+    * Returns random node from this bucket
+    */
   def random: Node = {
     assert(nodes.nonEmpty)
     nodes.get(Random.rint(nodes.value.size)).node
   }
 
+  /**
+    * Returns nodes that was added/updated before provided time
+    */
   def outdatedNodes(time: LocalDateTime): Vector[Node] = {
     nodes.value.collect {
       case NodeActivity(node, lastActive, _) if lastActive.isBefore(time) =>
@@ -30,25 +62,46 @@ sealed abstract class KBucket extends Product with Serializable {
     }
   }
 
+  /**
+    * Finds node which at least once refused to respond
+    */
   def findBad: Option[Node] = nodes.bad.headOption.map(_.node)
 
+  /**
+    * Swap `node` in this bucket onto `replacement`
+    */
   def swap(node: Node, replacement: Node)(
       implicit clock: Clock
   ): Result[KBucket] =
     KBucket.create(from, to, nodes.swap(node, replacement))
 
+  /**
+    * Checks if `nodeId` is in this bucket range
+    */
   def inRange(nodeId: NodeId): Boolean = {
     val id = nodeId.toPrefix
     id >= from && id < to
   }
 
+  /**
+    * Checks if this bucket can be split
+    */
   def canSplit: Boolean = from < to
 
+  /**
+    * Check if this bucket does not have provided `node`
+    */
   def isNewNode(node: Node): Boolean =
     nodes.nonExist(node)
 
+  /**
+    * Checks if `node` is already in the bucket
+    */
   def nonNewNode(node: Node): Boolean = !isNewNode(node)
 
+  /**
+    * Create a splitting prefix
+    */
   def midpoint: Result[Prefix] = {
     Either.cond(
       canSplit,
@@ -59,6 +112,9 @@ sealed abstract class KBucket extends Product with Serializable {
     )
   }
 
+  /**
+    * Split this bucket into two buckets
+    */
   def split()(implicit clock: Clock): Result[(KBucket, KBucket)] = this match {
     case b @ KBucket.EmptyBucket(_, _, _, _) =>
       Error.KBucketError(s"Can not split empty bucket $b").asLeft
@@ -91,16 +147,28 @@ sealed abstract class KBucket extends Product with Serializable {
       } yield (first, second)
   }
 
+  /**
+    * Mark nodes as bad
+    */
   def fail(node: Node*): Result[KBucket] =
     KBucket.create(from, to, nodes.fail(node: _*), lastUpdated)
 
+  /**
+    * Remove nodes from this bucket
+    */
   def remove(node: Node)(implicit clock: Clock): Result[KBucket] = {
     KBucket.create(from, to, nodes.filterNot(node))
   }
 
+  /**
+    * Find a `node`` by provided `nodeId`
+    */
   def find(nodeId: NodeId): Option[Node] =
     nodes.value.find(_.node.nodeId === nodeId).map(_.node)
 
+  /**
+    * Add nodes to this bucket
+    */
   def add(node: Node*)(implicit clock: Clock): Result[KBucket] = {
     node match {
       case Seq()           => this.asRight
@@ -109,6 +177,9 @@ sealed abstract class KBucket extends Product with Serializable {
     }
   }
 
+  /**
+    * Add one node this bucket
+    */
   def addOne(node: Node)(implicit clock: Clock): Result[KBucket] = {
     assert(inRange(node.nodeId))
     this match {
@@ -158,6 +229,9 @@ object KBucket {
       lastUpdated: LocalDateTime
   ) extends KBucket
 
+  /**
+    * Smart constructor that creates [[KBucket]] with provided last update time
+    */
   def create(
       from: Prefix,
       to: Prefix,
@@ -172,6 +246,10 @@ object KBucket {
     else
       Bucket(from, to, nodes, lastUpdated).asRight
   }
+
+  /**
+    * Smart constructor that creates [[KBucket]] with current time
+    */
   def create(
       from: Prefix,
       to: Prefix,
